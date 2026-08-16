@@ -11,6 +11,7 @@ import {
   computeRemainingMs,
   continueFocus as continueFocusEngine,
   createSession,
+  finish as finishEngine,
   pause as pauseEngine,
   reconcile,
   resume as resumeEngine,
@@ -21,6 +22,7 @@ const TICK_INTERVAL_MS = 300;
 
 interface StartOptions {
   ritualId?: string | null;
+  taskId?: string | null;
   focusMinutes?: number | null;
   breakMinutes?: number | null;
   cyclesTarget?: number | null;
@@ -36,6 +38,7 @@ interface TimerStoreState {
   advancePhase: () => void;
   continueFocus: (extendMinutes: number) => void;
   cancel: () => void;
+  finish: () => void;
 }
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -78,6 +81,7 @@ export const useTimerStore = create<TimerStoreState>()((set, get) => ({
       mode,
       now,
       ritualId: options?.ritualId ?? null,
+      taskId: options?.taskId ?? null,
       focusMinutes: options?.focusMinutes,
       breakMinutes: options?.breakMinutes,
       cyclesTarget: options?.cyclesTarget,
@@ -132,6 +136,16 @@ export const useTimerStore = create<TimerStoreState>()((set, get) => ({
     if (!session) return;
     const now = Date.now();
     const next = cancelEngine(session, now);
+    set({ session: next });
+    stopInterval();
+    persistSession(next, now);
+  },
+
+  finish: () => {
+    const { session } = get();
+    if (!session) return;
+    const now = Date.now();
+    const next = finishEngine(session, now);
     set({ session: next });
     stopInterval();
     persistSession(next, now);

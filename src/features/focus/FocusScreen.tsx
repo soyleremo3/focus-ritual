@@ -63,6 +63,7 @@ export function FocusScreen() {
   const advancePhase = useTimerStore((s) => s.advancePhase);
   const continueFocus = useTimerStore((s) => s.continueFocus);
   const cancel = useTimerStore((s) => s.cancel);
+  const finish = useTimerStore((s) => s.finish);
   const elapsedMs = useElapsedMs();
   const remainingMs = useRemainingMs();
 
@@ -173,6 +174,11 @@ export function FocusScreen() {
     cancel();
     soundPause();
   };
+  const handleFinish = () => {
+    haptics.select();
+    finish();
+    soundPause();
+  };
   const handleOpenSpaces = () => {
     haptics.tap();
     router.push('/spaces');
@@ -250,6 +256,7 @@ export function FocusScreen() {
             onAdvancePhase={handleAdvancePhase}
             onContinueFocus={handleContinueFocus}
             onCancel={handleCancel}
+            onFinish={handleFinish}
           />
         </View>
       </SafeAreaView>

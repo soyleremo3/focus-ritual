@@ -16,6 +16,8 @@ export interface TimerControlsProps {
   onAdvancePhase: () => void;
   onContinueFocus: () => void;
   onCancel: () => void;
+  /** Deliberate "I'm done" — the counterpart to Cancel for open-ended modes that never naturally complete. */
+  onFinish: () => void;
 }
 
 export function TimerControls({
@@ -27,6 +29,7 @@ export function TimerControls({
   onAdvancePhase,
   onContinueFocus,
   onCancel,
+  onFinish,
 }: TimerControlsProps) {
   const theme = useTheme();
   const gap = theme.spacing.sm;
@@ -49,6 +52,7 @@ export function TimerControls({
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
         <IconButton icon="x" onPress={onCancel} color={palette.textMuted} backgroundColor={palette.surface} />
         <Button label="Pause" onPress={onPause} backgroundColor={palette.accent} textColor={palette.onAccent} />
+        <IconButton icon="check" onPress={onFinish} color={palette.textMuted} backgroundColor={palette.surface} />
       </View>
     );
   }
@@ -58,6 +62,7 @@ export function TimerControls({
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
         <IconButton icon="x" onPress={onCancel} color={palette.textMuted} backgroundColor={palette.surface} />
         <Button label="Resume" onPress={onResume} backgroundColor={palette.accent} textColor={palette.onAccent} />
+        <IconButton icon="check" onPress={onFinish} color={palette.textMuted} backgroundColor={palette.surface} />
       </View>
     );
   }
@@ -96,6 +101,7 @@ export function TimerControls({
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
         <IconButton icon="x" onPress={onCancel} color={palette.textMuted} backgroundColor={palette.surface} />
         <Button label={nextLabel} onPress={onAdvancePhase} backgroundColor={palette.accent} textColor={palette.onAccent} />
+        <IconButton icon="check" onPress={onFinish} color={palette.textMuted} backgroundColor={palette.surface} />
       </View>
     </View>
   );
