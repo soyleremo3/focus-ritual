@@ -91,6 +91,18 @@ export const MIGRATIONS: Migration[] = [
       `CREATE INDEX idx_rituals_archived ON rituals (is_archived)`,
     ],
   },
+  {
+    version: 2,
+    statements: [
+      // Focus Spaces gallery (Phase 4): favorite/last-used ordering for spaces, matching
+      // the pattern already established for rituals.
+      `ALTER TABLE spaces ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE spaces ADD COLUMN last_used_at INTEGER`,
+      // The user's standalone (non-ritual) Focus Space pick, so it persists across app
+      // restarts independently of any ritual.
+      `ALTER TABLE settings ADD COLUMN active_space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL`,
+    ],
+  },
 ];
 
 interface UserVersionRow {
