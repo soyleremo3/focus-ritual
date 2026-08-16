@@ -8,6 +8,47 @@ semantic versioning until a `1.0.0` release.
 
 ## [Unreleased]
 
+### Phase 6 — Today Tasks, Session History & Statistics
+
+#### Added
+
+- `domain/task`: `Task` type + `isValidTaskTitle`/`sortTasks`/`nextSortOrder`.
+  `tasksRepo`: full CRUD — hard delete (unlike Rituals/Spaces; `sessions.task_id`'s
+  existing `ON DELETE SET NULL` handles the unlink safely, tested).
+- `taskStore`, `TodayScreen` + `TaskCard` (quick-add, inline tap-to-rename, checkbox,
+  per-task Start, delete with confirm), wired into the Tasks tab.
+- Start-from-task on the Focus screen (`startTaskId` param): no ritual involved, starts
+  with whichever mode is currently selected, tagged with `taskId`; shows the linked
+  task's title while active, including after cold-start recovery.
+- `finish()` in the timer engine — the deliberate-completion counterpart to `cancel()`,
+  needed because Deep Work/90-minute/Stopwatch/Flow/targetless-Custom sessions have no
+  `cyclesTarget` and so could never naturally reach `'completed'` via `reconcile()`.
+  Surfaced as a checkmark button next to Cancel whenever a session is running, paused, or
+  halted at a phase boundary.
+- `TimerSession.bankedFocusMs` + `computeTotalFocusMs()` — total focus-phase time across
+  a session's whole lifetime, not just its current phase (`accumulatedMs` resets on every
+  phase transition, so this was previously unrecoverable for any multi-cycle session).
+  Migration v4 adds `sessions.banked_focus_ms`.
+- `sessionsRepo.listTerminalSessions` — completed/cancelled sessions, the History data
+  source. `sessions.task_id` (present since Phase 2 but never wired in) is now mapped.
+- `domain/stats/statsAggregation.ts`: pure, framework-independent — `summarize`, date
+  range filtering, `last7DaysBuckets`, `groupByRitual`/`groupByTask`, `favoriteRitualId`,
+  `bestFocusSegment`, `weeklyRhythm`, `formatFocusDuration`. Every total derives from
+  `computeTotalFocusMs()` over persisted rows — no separately-maintained counters.
+- `HistoryScreen` (Today/Week/Month summary cards, a custom 7-day bar chart, weekly
+  rhythm, favorite ritual, best focus time of day, ritual/task breakdowns — plain `View`s,
+  no charting dependency), wired into the History tab.
+
+#### Fixed
+
+- A real double-counting bug, caught by a test written for `bankedFocusMs` rather than by
+  inspection: `reconcile()`'s branch that halts Flow Mode at its focus-completion boundary
+  doesn't change `phase` (it stays `'focus'`), so bumping `bankedFocusMs` *and* leaving
+  `accumulatedMs` frozen there double-counted that segment the moment
+  `computeTotalFocusMs`'s own current-phase check added it a second time. Fixed by only
+  bumping `bankedFocusMs` in the branches that actually move `phase` away from a
+  closed-out segment.
+
 ### Phase 5 — Sound Library & Mixer Polish
 
 #### Added

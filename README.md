@@ -22,8 +22,12 @@ no API keys, no analytics, no paid services.
 - **Reusable Focus Rituals** — compose a timer mode, Focus Space, and ambient sound mix
   into a named preset; start a session directly from one (see
   [Focus Rituals](#focus-rituals) below)
-- **Minimal Today tasks** *(Phase 6)*
-- **Session history and local statistics** *(Phase 6)*
+- **Minimal Today tasks** — quick-add, check off, start a focus session tagged to a task
+  in one tap (see [Today Tasks](#today-tasks) below)
+- **Session history and local statistics** — daily/weekly/monthly focus time, a 7-day bar
+  chart, weekly rhythm, favorite ritual, best focus time of day, and ritual/task
+  breakdowns, all derived from persisted sessions with no charting dependency (see
+  [History & Statistics](#history--statistics) below)
 - **Local notifications and haptics** *(notifications: Phase 7; haptics: built now)*
 
 ## Tech stack
@@ -80,7 +84,7 @@ FocusRitual/
       seed.ts                    idempotent bundled spaces/sounds seed
       seedExampleRituals.ts       one-time example-ritual seed (see Focus Rituals below)
       repositories/               sessionsRepo, spacesRepo, soundsRepo, ritualsRepo,
-                                  settingsRepo
+                                  settingsRepo, tasksRepo
     domain/                     pure, framework-free, unit-tested business logic
       timer/                     timestamp-based timer engine (see below)
       palette/                   WCAG contrast helper behind scene/mood palette isDark
@@ -89,11 +93,14 @@ FocusRitual/
       space/                     Space types + isValidSpaceName/sortSpaces
       sound/                     framework-independent sound engine core (see
                                   Ambient sound mixer below) + selectLockScreenOwner
+      task/                      Task types + isValidTaskTitle/sortTasks/nextSortOrder
+      stats/                     statsAggregation.ts (see History & Statistics below)
     store/                      Zustand — one small store per concern, not one mega-store
       timerStore.ts              owns the AppState subscription + refresh interval + persistence
       soundStore.ts              serializable UI state only, delegates to soundEngine
       ritualStore.ts              wraps ritualsRepo, keeps a sorted in-memory cache
       spaceStore.ts               wraps spacesRepo + settingsRepo (see Focus Spaces below)
+      taskStore.ts                wraps tasksRepo, keeps a sortTasks-ordered in-memory cache
     theme/                      design system — tokens, motion, palettes, ThemeProvider
       scenePalettes.ts            3 hand-authored bundled scenes + shared PaletteColors
       moodPalettes.ts             6 mood palettes for custom-photo spaces
@@ -104,6 +111,8 @@ FocusRitual/
       spaces/                    SpacesGalleryScreen, SpaceCard, SpaceEditorScreen
       sound/                     SoundMixEditor — shared by the mixer sheet and the
                                   ritual editor's sound-mix draft
+      tasks/                     TodayScreen, TaskCard
+      history/                   HistoryScreen, SummaryCard, Bar, BreakdownList
     components/                 shared, theme-aware UI primitives
     lib/                        imperative wrappers around native/expo modules
       audio/soundEngine.ts       thin expo-audio wrapper around domain/sound's engine core
@@ -111,9 +120,9 @@ FocusRitual/
       haptics.ts
 ```
 
-Not created yet — `tasksStore`/`settingsStore` (UI-facing), `lib/notifications/
-scheduler.ts`, and the `sounds/tasks/history/settings` feature directories. Each arrives
-with its own phase below rather than being pre-stubbed.
+Not created yet — a `settingsStore` (UI-facing; `settingsRepo` itself already exists and
+is used directly by `spaceStore`/`soundStore`) and `lib/notifications/scheduler.ts`. Each
+arrives with its own phase below rather than being pre-stubbed.
 
 ## Timer engine
 
@@ -141,6 +150,22 @@ needs a human decision (`status: 'awaiting-start'`) rather than guessing intent:
 correctness-for-its-own-sake: cold-start recovery (below) reconciles a session that may
 already have halted while the app wasn't running, and does so through the exact same
 function backgrounding uses.
+
+**Deliberate completion vs. discard (Phase 6)**: Deep Work, 90-minute, Stopwatch, Flow,
+and Custom-without-a-cycles-target have no `cyclesTarget`, so `reconcile()` can never
+naturally mark them `'completed'` — before Phase 6 the only way to end one was `cancel()`,
+making a fully-worked 50-minute Deep Work session indistinguishable from bailing out after
+30 seconds. `finish()` is the deliberate-completion counterpart, available from
+`running`/`paused`/`awaiting-start`, surfaced as a checkmark button next to Cancel.
+
+**bankedFocusMs**: `accumulatedMs` resets to 0 on every phase transition, so a
+multi-cycle session's *total* focus time was never retained anywhere once it moved past
+its first phase. `TimerSession.bankedFocusMs` banks each closed-out focus phase's planned
+duration as `reconcile()` transitions past it; `computeTotalFocusMs(session, now)`
+combines that with whatever's still live in the current phase. History/Statistics
+(below) depend on this being correct — it's the only source of "how much did this session
+actually total," and a test written for this change caught a real double-counting bug in
+Flow Mode's halt-on-focus-completion branch (see the commit for details) before it shipped.
 
 ## Persistence
 
@@ -173,8 +198,9 @@ active session (`running` / `paused` / `awaiting-start`) and runs it through the
 wasn't running for a while," so no separate recovery codepath was needed, only the
 already-correct primitive.
 
-`tasks` and `settings` have tables but no repository yet — CRUD for those lands with
-their own phase (6, 7) rather than being built ahead of the UI that needs it.
+`settings` has been a real repository since Phase 4; `tasksRepo` (Phase 6) is the last of
+the seven Phase 2 tables to get one — each phase built its repository only once the UI
+that needed it existed, rather than scaffolding CRUD ahead of time.
 
 ## Focus Rituals
 
@@ -305,6 +331,51 @@ verified on a real Android device (see [Verification](#verification) below) — 
 cannot reproduce native background-audio behavior that depends on `app.json` config
 plugins baked into a real build.
 
+## Today Tasks
+
+A Task (`src/domain/task/`) is deliberately simple: a title, done/not-done, and a
+`sortOrder` — no due dates, no recurrence, no subtasks. `src/db/repositories/tasksRepo.ts`
+is full CRUD, and unlike Rituals/Spaces, deletion is a **hard delete**: a task isn't a
+historical record anything else needs to keep resolving, and `sessions.task_id` is
+`ON DELETE SET NULL`, so deleting a task safely clears the link on any session that
+referenced it without losing that session's own history (tested). `Task.ritualId` exists
+in the schema but stays dormant — no UI links a task to a ritual in this simple version,
+the same posture as Focus Spaces' unused `linked_session_count` column.
+
+**Starting from a task**: `TaskCard`'s Start button navigates to the Focus tab with a
+`startTaskId` param — no ritual involved, the session starts with whichever timer mode is
+currently selected on the Focus screen and is just tagged with `taskId`. This is
+deliberately simpler than start-from-ritual: "associate a session with a task" only needs
+that tag, not a second resolution of a linked ritual's space/sound. The task's title shows
+under the header while its session is active (and on cold-start recovery of one), via the
+same resolve-effect pattern as the ritual scene/mix effect.
+
+## History & Statistics
+
+`src/domain/stats/statsAggregation.ts` is pure and framework-independent: every function
+takes an already-fetched `TimerSession[]` — in practice,
+`sessionsRepo.listTerminalSessions()`'s result (completed/cancelled sessions only; a
+still-active session is live Focus-screen state, not history yet) — and derives
+everything else with no DB access and no `Date.now()` side effects, so it's fully
+deterministic and unit-tested without mocking the clock. `summarize()`, `startOfDay`/
+`Week`/`Month` + `filterSessionsInRange` (daily/weekly/monthly focus time),
+`last7DaysBuckets` (a simple daily bar chart's data), `groupByRitual`/`groupByTask`
+(breakdowns — "category" is interpreted as *Ritual*, this app's closest existing concept
+to one, since there's no separate category entity), `favoriteRitualId`, `bestFocusSegment`
+(morning/afternoon/evening/night, by accumulated focus time), and `weeklyRhythm` (which
+days of the week you tend to focus). Every total is derived from
+`computeTotalFocusMs()` over the persisted rows — nothing here is a separately-maintained
+counter that could drift out of sync with the sessions table.
+
+`HistoryScreen` composes these over data loaded once per tab-focus (`useFocusEffect`,
+matching `RitualsListScreen`/`TodayScreen`'s pattern) and renders a custom 7-day bar chart
+plus a weekly-rhythm chart as plain `View`s (`features/history/Bar.tsx`) — no charting
+library added, matching the same "code-drawn, not a dependency" choice already made for
+the timer ring and scene backdrops. Ritual/task names for the breakdown lists resolve
+cache-first through the existing stores, falling back to a direct DB read that includes
+archived rituals (`ritualsRepo.getRitualById` was never active-only) — a deleted ritual a
+historical session referenced still shows its real name instead of a placeholder.
+
 ## Neutral chrome vs. scene palettes
 
 `ThemeProvider` exposes two independent palettes: a **neutral chrome palette**
@@ -354,9 +425,15 @@ way); master volume; standalone mix persisted via `settingsRepo` and restored (n
 auto-played) on app start; `SoundMixEditor` shared between the mixer sheet and the ritual
 editor's sound-mix draft. See [Ambient sound mixer](#ambient-sound-mixer) above.
 
-**Phase 6 — Today tasks + History/stats.** Task CRUD linked to sessions,
-`domain/stats/statsAggregation.ts`, and a `HistoryScreen` built from plain Views — no
-charting library added.
+**Phase 6 — Today tasks + History/stats.** ✅ `tasksRepo` full CRUD (hard delete —
+`sessions.task_id` safely unlinks via its existing `ON DELETE SET NULL`), `taskStore`,
+`TodayScreen` + `TaskCard`, and start-from-task on the Focus screen. `finish()` added to
+the timer engine (Deep Work/90-minute/Stopwatch/Flow/targetless-Custom sessions could
+previously only ever end as `'cancelled'`) alongside `bankedFocusMs` (a real
+double-counting bug in Flow Mode's halt branch was caught by a test written for this
+change and fixed before it shipped — see [Timer engine](#timer-engine) above).
+`domain/stats/statsAggregation.ts` and `HistoryScreen` — see
+[History & Statistics](#history--statistics) above.
 
 **Phase 7 — Notifications, haptics polish, Settings.** Full local-notification scheduling
 for session completion (idempotent cancel-and-reschedule on every pause/resume/skip, the
@@ -368,17 +445,20 @@ performance pass.
 
 ## Verification
 
-Before Phase 6 begins, all of the following must pass:
+Before Phase 7 begins, all of the following must pass:
 
 1. `npm run typecheck`, `npm run lint`, `npx expo-doctor` — all clean.
-2. `npm test` — passes, including `domain/timer/timerEngine`, `domain/palette/
-   paletteContrast`, `domain/ritual/ritual`, `domain/space/space`, `domain/sound/
-   soundEngine` (fake-timer-driven: no duplicate players, fade-out-before-release,
-   cancel-pending-removal-on-re-add, sticky lock-screen ownership), `theme/spacePalette`,
-   and every `db/__tests__` suite (migrations, `sessionsRepo`, `ritualsRepo`,
-   `spacesRepo`, `settingsRepo` including the sound-mix/master-volume columns,
-   bundled-data seed idempotency, example-ritual seed idempotency — run against a real
-   `node:sqlite`-backed database, not a hand-rolled mock).
+2. `npm test` — passes, including `domain/timer/timerEngine` (now covering `finish()` and
+   `bankedFocusMs` across pause/resume/multi-cycle/Flow-halt scenarios), `domain/palette/
+   paletteContrast`, `domain/ritual/ritual`, `domain/space/space`, `domain/task/task`,
+   `domain/stats/statsAggregation`, `domain/sound/soundEngine` (fake-timer-driven: no
+   duplicate players, fade-out-before-release, cancel-pending-removal-on-re-add, sticky
+   lock-screen ownership), `theme/spacePalette`, and every `db/__tests__` suite
+   (migrations, `sessionsRepo` including `listTerminalSessions` and the
+   repeated-upsert-never-double-records case, `ritualsRepo`, `spacesRepo`, `tasksRepo`
+   (including the delete-safely-unlinks-a-session case), `settingsRepo`, bundled-data seed
+   idempotency, example-ritual seed idempotency — run against a real `node:sqlite`-backed
+   database, not a hand-rolled mock).
 3. In the Expo (web) preview: Focus tab renders correctly (hero timer, scene backdrop, all
    6 modes); Rituals tab shows the 3 seeded examples; create/edit/duplicate/delete/favorite
    all work and the list re-sorts correctly; starting a ritual switches to the Focus tab
@@ -391,8 +471,12 @@ Before Phase 6 begins, all of the following must pass:
    filters, multiple simultaneous layers, per-layer and master volume sliders, and a
    master play/pause; the standalone mix (layers + master volume) persists across a
    reload and restores loaded-but-paused; editing a ritual's sound mix in its editor saves
-   correctly and starting that ritual applies the saved mix; the other 3 tabs render their
-   empty state without crashing.
+   correctly and starting that ritual applies the saved mix; the Today tab supports
+   quick-add/rename/check-off/delete and Start tags a session with that task; the Finish
+   button correctly completes an open-ended session (Deep Work/Stopwatch/Flow) instead of
+   only ever being cancellable; the History tab shows Today/Week/Month summaries, the
+   7-day and weekly-rhythm bar charts, and ritual/task breakdowns that update after a
+   session finishes; the Settings tab still renders its empty state without crashing.
 4. **Real-device smoke tests on a real Android device** (a dev client build if Expo Go
    can't reproduce the native behavior being tested):
    - Start a timer, lock/background the phone, foreground it — elapsed time reconciles
