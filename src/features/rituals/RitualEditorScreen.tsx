@@ -18,7 +18,8 @@ import { ModePicker } from '@/features/focus/ModePicker';
 import * as haptics from '@/lib/haptics';
 import { soundLibrary } from '@/lib/audio/soundLibrary';
 import { useRitualStore } from '@/store/ritualStore';
-import { defaultSceneId, sceneList, type SceneId } from '@/theme/scenePalettes';
+import { useSpaceStore } from '@/store/spaceStore';
+import { defaultSceneId } from '@/theme/scenePalettes';
 import { useTheme } from '@/theme/ThemeProvider';
 
 import { NumberField } from './NumberField';
@@ -50,8 +51,9 @@ export function RitualEditorScreen({ ritualId }: RitualEditorScreenProps) {
   const [focusMinutes, setFocusMinutes] = useState<number | null>(MODE_DEFAULTS[DEFAULT_MODE].focusMinutes);
   const [breakMinutes, setBreakMinutes] = useState<number | null>(MODE_DEFAULTS[DEFAULT_MODE].breakMinutes);
   const [cyclesTarget, setCyclesTarget] = useState<number | null>(MODE_DEFAULTS[DEFAULT_MODE].cyclesTarget);
-  const [spaceId, setSpaceId] = useState<SceneId>(defaultSceneId);
+  const [spaceId, setSpaceId] = useState<string>(defaultSceneId);
   const [soundLayers, setSoundLayers] = useState<RitualSoundLayer[]>([]);
+  const spaces = useSpaceStore((s) => s.spaces);
 
   useEffect(() => {
     if (!ritualId) return;
@@ -64,7 +66,7 @@ export function RitualEditorScreen({ ritualId }: RitualEditorScreenProps) {
       setFocusMinutes(ritual.focusMinutes);
       setBreakMinutes(ritual.breakMinutes);
       setCyclesTarget(ritual.cyclesTarget);
-      setSpaceId((ritual.spaceId as SceneId) ?? defaultSceneId);
+      setSpaceId(ritual.spaceId ?? defaultSceneId);
       setSoundLayers(ritual.soundLayers);
       setLoading(false);
     }
@@ -244,14 +246,14 @@ export function RitualEditorScreen({ ritualId }: RitualEditorScreenProps) {
             Focus Space
           </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
-            {sceneList.map((scene) => (
+            {spaces.map((space) => (
               <Chip
-                key={scene.id}
-                label={scene.name}
-                selected={scene.id === spaceId}
+                key={space.id}
+                label={space.name}
+                selected={space.id === spaceId}
                 onPress={() => {
                   haptics.select();
-                  setSpaceId(scene.id);
+                  setSpaceId(space.id);
                 }}
               />
             ))}

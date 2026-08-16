@@ -10,7 +10,7 @@ import { MODE_LABELS } from '@/features/focus/ModePicker';
 import * as haptics from '@/lib/haptics';
 import { soundLibrary } from '@/lib/audio/soundLibrary';
 import { useRitualStore } from '@/store/ritualStore';
-import { scenePalettes, type SceneId } from '@/theme/scenePalettes';
+import { useSpaceStore } from '@/store/spaceStore';
 import { useTheme } from '@/theme/ThemeProvider';
 
 export interface RitualCardProps {
@@ -29,8 +29,9 @@ export function RitualCard({ ritual }: RitualCardProps) {
   const toggleFavorite = useRitualStore((s) => s.toggleFavorite);
   const duplicate = useRitualStore((s) => s.duplicate);
   const remove = useRitualStore((s) => s.remove);
+  const spaces = useSpaceStore((s) => s.spaces);
 
-  const sceneName = ritual.spaceId ? scenePalettes[ritual.spaceId as SceneId]?.name : undefined;
+  const sceneName = ritual.spaceId ? spaces.find((s) => s.id === ritual.spaceId)?.name : undefined;
   const durationLabel =
     ritual.focusMinutes != null
       ? `${ritual.focusMinutes} min${ritual.cyclesTarget ? ` × ${ritual.cyclesTarget}` : ''}`
