@@ -30,11 +30,22 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# Windows
+Thumbs.db
+
+# env files
+.env
 .env*.local
 
 # typescript
 *.tsbuildinfo
+
+# testing
+coverage/
+
+# editors
+.idea/
+.vscode/.react/
 
 example
 
