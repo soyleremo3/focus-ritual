@@ -31,9 +31,11 @@ import { useTheme } from '@/theme/ThemeProvider';
 
 import { Bar } from './Bar';
 import { BreakdownList } from './BreakdownList';
+import { SessionListItem } from './SessionListItem';
 import { SummaryCard } from './SummaryCard';
 
 const MAX_BREAKDOWN_ENTRIES = 5;
+const MAX_RECENT_SESSIONS = 20;
 
 /** Cache-first (ritualStore), falling back to a direct DB read — includes archived rituals, so a
  * deleted ritual a historical session referenced still resolves to its real name. */
@@ -193,6 +195,23 @@ export function HistoryScreen() {
         {taskBreakdown.length > 0 && (
           <BreakdownList title="By Task" entries={taskBreakdown} resolveLabel={(key) => taskTitles[key] ?? '…'} />
         )}
+
+        <View style={{ gap: theme.spacing.sm }}>
+          <Text variant="label" color={theme.neutral.textMuted}>
+            Recent Sessions
+          </Text>
+          <View style={{ gap: theme.spacing.sm }}>
+            {sessions.slice(0, MAX_RECENT_SESSIONS).map((s) => (
+              <SessionListItem
+                key={s.id}
+                session={s}
+                subtitle={
+                  (s.ritualId && ritualNames[s.ritualId]) || (s.taskId && taskTitles[s.taskId]) || null
+                }
+              />
+            ))}
+          </View>
+        </View>
       </ScrollView>
     </Screen>
   );
