@@ -1,22 +1,20 @@
-import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Alert, ScrollView, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
 import { IconButton } from '@/components/IconButton';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
-import { VolumeBar } from '@/components/VolumeBar';
 import { getDatabase } from '@/db/client';
 import { getRitualById, type RitualDraft } from '@/db/repositories/ritualsRepo';
 import { isValidRitualName } from '@/domain/ritual/ritual';
 import type { Ritual, RitualSoundLayer } from '@/domain/ritual/types';
 import { MODE_DEFAULTS, type TimerMode } from '@/domain/timer/types';
 import { ModePicker } from '@/features/focus/ModePicker';
+import { SoundMixEditor } from '@/features/sound/SoundMixEditor';
 import * as haptics from '@/lib/haptics';
-import { soundLibrary } from '@/lib/audio/soundLibrary';
 import { useRitualStore } from '@/store/ritualStore';
 import { useSpaceStore } from '@/store/spaceStore';
 import { defaultSceneId } from '@/theme/scenePalettes';
@@ -264,35 +262,17 @@ export function RitualEditorScreen({ ritualId }: RitualEditorScreenProps) {
           <Text variant="label" color={theme.neutral.textMuted}>
             Ambient Sounds
           </Text>
-          {soundLibrary.map((sound) => {
-            const layer = soundLayers.find((l) => l.soundId === sound.id);
-            const active = layer != null;
-            return (
-              <View key={sound.id} style={{ gap: theme.spacing.sm }}>
-                <Pressable
-                  onPress={() => toggleSoundLayer(sound.id)}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}
-                >
-                  <Feather
-                    name={active ? 'volume-2' : 'volume-x'}
-                    size={18}
-                    color={active ? theme.neutral.accent : theme.neutral.textMuted}
-                  />
-                  <Text variant="body" color={active ? theme.neutral.text : theme.neutral.textMuted}>
-                    {sound.label}
-                  </Text>
-                </Pressable>
-                {active && layer && (
-                  <VolumeBar
-                    value={layer.volume}
-                    onChange={(volume) => setSoundLayerVolume(sound.id, volume)}
-                    trackColor={theme.neutral.border}
-                    fillColor={theme.neutral.accent}
-                  />
-                )}
-              </View>
-            );
-          })}
+          <SoundMixEditor
+            layers={soundLayers}
+            onToggleLayer={toggleSoundLayer}
+            onLayerVolumeChange={setSoundLayerVolume}
+            textColor={theme.neutral.text}
+            mutedColor={theme.neutral.textMuted}
+            accentColor={theme.neutral.accent}
+            onAccentColor={theme.neutral.onAccent}
+            trackColor={theme.neutral.border}
+            borderColor={theme.neutral.border}
+          />
         </View>
       </ScrollView>
 
