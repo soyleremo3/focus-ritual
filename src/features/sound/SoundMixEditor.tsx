@@ -56,11 +56,14 @@ export function SoundMixEditor({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return soundLibrary.filter((sound) => {
+      // An active layer always stays visible, even outside the current filter — otherwise
+      // switching category/search could hide the only control for turning it back off.
+      if (layers.some((l) => l.soundId === sound.id)) return true;
       if (category && sound.category !== category) return false;
       if (q && !sound.label.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [category, query]);
+  }, [category, query, layers]);
 
   return (
     <View style={{ gap: theme.spacing.lg }}>
