@@ -5,6 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { initNotifications } from '@/lib/notifications/scheduler';
 import { fontsToLoad } from '@/theme/typography';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 
@@ -25,6 +26,10 @@ export default function RootLayout() {
       shouldPlayInBackground: true,
       interruptionMode: 'doNotMix',
     });
+  }, []);
+
+  useEffect(() => {
+    void initNotifications();
   }, []);
 
   if (!fontsLoaded) {
