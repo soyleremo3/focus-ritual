@@ -68,7 +68,7 @@ export function FocusScreen() {
 
   const soundPlay = useSoundStore((s) => s.play);
   const soundPause = useSoundStore((s) => s.pause);
-  const soundSetMix = useSoundStore((s) => s.setMix);
+  const applyRitualMix = useSoundStore((s) => s.applyRitualMix);
 
   const isSessionActive = session != null && ACTIVE_STATUSES.has(session.status);
 
@@ -119,7 +119,7 @@ export function FocusScreen() {
       .then((ritual) => {
         if (!ritual || cancelled) return;
         if (ritual.spaceId) setRitualSpaceOverride(ritual.spaceId);
-        soundSetMix(ritualToActiveMix(ritual));
+        applyRitualMix(ritualToActiveMix(ritual));
         if (sessionStatus === 'running') soundPlay();
       })
       .catch((error: unknown) => {
@@ -129,16 +129,17 @@ export function FocusScreen() {
     return () => {
       cancelled = true;
     };
-  }, [sessionRitualId, sessionStatus, soundSetMix, soundPlay]);
+  }, [sessionRitualId, sessionStatus, applyRitualMix, soundPlay]);
 
   // A plain "Start" (no ritual) creates a new session with no ritualId — release any
-  // leftover ritual space override so the screen falls back to the user's own gallery
-  // pick instead of lingering on a previous ritual's space.
+  // leftover ritual space/sound override so the screen falls back to the user's own
+  // standalone picks instead of lingering on a previous ritual's.
   const sessionId = session?.id ?? null;
   useEffect(() => {
     if (sessionId && !sessionRitualId) {
       setRitualSpaceOverride(null);
       appliedRitualIdRef.current = null;
+      void useSoundStore.getState().restoreStandaloneMix();
     }
   }, [sessionId, sessionRitualId]);
 
