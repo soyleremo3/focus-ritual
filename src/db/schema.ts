@@ -123,6 +123,23 @@ export const MIGRATIONS: Migration[] = [
       `ALTER TABLE sessions ADD COLUMN banked_focus_ms INTEGER NOT NULL DEFAULT 0`,
     ],
   },
+  {
+    version: 5,
+    statements: [
+      // Notifications & Settings (Phase 7). default_focus_minutes/default_break_minutes
+      // back only Custom mode's standalone (non-ritual) start — every other mode's numbers
+      // are what define that mode, so they stay in MODE_DEFAULTS, not user-configurable
+      // here. auto_start_breaks/auto_start_next_focus feed domain/timer/timerEngine's
+      // autoStarts(); their defaults (1/0) match what was previously hardcoded, so an
+      // un-migrated user's behavior doesn't change. pause_sound_with_timer controls
+      // whether ambient sound pauses/resumes alongside the timer's own pause/resume.
+      `ALTER TABLE settings ADD COLUMN default_focus_minutes INTEGER NOT NULL DEFAULT 25`,
+      `ALTER TABLE settings ADD COLUMN default_break_minutes INTEGER NOT NULL DEFAULT 5`,
+      `ALTER TABLE settings ADD COLUMN auto_start_breaks INTEGER NOT NULL DEFAULT 1`,
+      `ALTER TABLE settings ADD COLUMN auto_start_next_focus INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE settings ADD COLUMN pause_sound_with_timer INTEGER NOT NULL DEFAULT 1`,
+    ],
+  },
 ];
 
 interface UserVersionRow {

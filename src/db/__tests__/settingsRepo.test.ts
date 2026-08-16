@@ -3,9 +3,11 @@ import {
   getActiveSpaceId,
   getMasterVolume,
   getOrCreateSettings,
+  getSettings,
   setActiveSoundMix,
   setActiveSpaceId,
   setMasterVolume,
+  updateSettings,
 } from '../repositories/settingsRepo';
 import { migrate } from '../schema';
 import { seedBundledData } from '../seed';
@@ -84,5 +86,64 @@ describe('settingsRepo', () => {
     expect(await getMasterVolume(db)).toBe(1);
     await setMasterVolume(db, 0.4);
     expect(await getMasterVolume(db)).toBe(0.4);
+  });
+
+  describe('getSettings / updateSettings', () => {
+    test('getSettings returns defaults matching the previously-hardcoded behavior', async () => {
+      const db = await setupDb();
+      expect(await getSettings(db)).toEqual({
+        themeMode: 'system',
+        hapticsEnabled: true,
+        notificationsEnabled: true,
+        weekStartsOn: 0,
+        defaultFocusMinutes: 25,
+        defaultBreakMinutes: 5,
+        autoStartBreaks: true,
+        autoStartNextFocus: false,
+        pauseSoundWithTimer: true,
+      });
+    });
+
+    test('updateSettings persists only the given fields, leaving the rest untouched', async () => {
+      const db = await setupDb();
+      const updated = await updateSettings(db, { hapticsEnabled: false, themeMode: 'dark' });
+      expect(updated.hapticsEnabled).toBe(false);
+      expect(updated.themeMode).toBe('dark');
+      expect(updated.notificationsEnabled).toBe(true); // untouched
+
+      const reread = await getSettings(db);
+      expect(reread).toEqual(updated);
+    });
+
+    test('updateSettings round-trips every field, including booleans and numbers', async () => {
+      const db = await setupDb();
+      const patch = {
+        themeMode: 'light' as const,
+        hapticsEnabled: false,
+        notificationsEnabled: false,
+        weekStartsOn: 1 as const,
+        defaultFocusMinutes: 50,
+        defaultBreakMinutes: 10,
+        autoStartBreaks: false,
+        autoStartNextFocus: true,
+        pauseSoundWithTimer: false,
+      };
+      const updated = await updateSettings(db, patch);
+      expect(updated).toEqual(patch);
+      expect(await getSettings(db)).toEqual(patch);
+    });
+
+    test('updateSettings with an empty patch is a no-op', async () => {
+      const db = await setupDb();
+      const before = await getSettings(db);
+      const after = await updateSettings(db, {});
+      expect(after).toEqual(before);
+    });
+
+    test('an unrecognized theme_mode value read from the row falls back to system', async () => {
+      const db = await setupDb();
+      await db.runAsync("UPDATE settings SET theme_mode = 'sepia' WHERE id = 1", []);
+      expect((await getSettings(db)).themeMode).toBe('system');
+    });
   });
 });
