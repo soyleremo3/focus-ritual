@@ -1,5 +1,6 @@
 import {
   advancePhase,
+  autoStarts,
   cancel,
   computeElapsedMs,
   computeRemainingMs,
@@ -226,6 +227,39 @@ describe('bankedFocusMs / computeTotalFocusMs', () => {
     const twice = reconcile(once, T0 + 999 * MIN);
     expect(twice).toBe(once); // short-circuited by the status guard, not just numerically equal
     expect(twice.bankedFocusMs).toBe(25 * MIN);
+  });
+});
+
+describe('autoStarts settings', () => {
+  it('defaults to auto-starting breaks but never the next focus (unchanged legacy behavior)', () => {
+    expect(autoStarts('break', 'pomodoro')).toBe(true);
+    expect(autoStarts('focus', 'pomodoro')).toBe(false);
+  });
+
+  it('autoStartBreaks: false halts at the focus/break boundary instead of auto-starting', () => {
+    const session = createSession({ id: 's1', mode: 'pomodoro', now: T0 });
+    const settings = { autoStartBreaks: false, autoStartNextFocus: false };
+    const halted = reconcile(session, T0 + 25 * MIN + 30_000, settings);
+    expect(halted.status).toBe('awaiting-start');
+    expect(halted.phase).toBe('focus'); // unchanged — reconcile halts before flipping phase
+  });
+
+  it('autoStartNextFocus: true auto-starts the next focus phase after a break', () => {
+    const session = createSession({ id: 's1', mode: 'pomodoro', now: T0 });
+    const settings = { autoStartBreaks: true, autoStartNextFocus: true };
+    // 25min focus + 5min break + 1s: both boundaries crossed in one reconcile call.
+    const result = reconcile(session, T0 + 25 * MIN + 5 * MIN + 1_000, settings);
+    expect(result.status).toBe('running');
+    expect(result.phase).toBe('focus');
+    expect(result.cyclesCompleted).toBe(1);
+  });
+
+  it("Flow's break decision stays deliberate even when autoStartBreaks is true", () => {
+    const session = createSession({ id: 's1', mode: 'flow', now: T0 });
+    const settings = { autoStartBreaks: true, autoStartNextFocus: false };
+    const halted = reconcile(session, T0 + 45 * MIN + 10_000, settings);
+    expect(halted.status).toBe('awaiting-start');
+    expect(halted.phase).toBe('focus');
   });
 });
 

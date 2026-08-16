@@ -40,15 +40,31 @@ export function otherPhase(phase: TimerPhase): TimerPhase {
   return phase === 'focus' ? 'break' : 'focus';
 }
 
+export interface AutoStartSettings {
+  autoStartBreaks: boolean;
+  autoStartNextFocus: boolean;
+}
+
+/** Matches what auto-start behavior used to be hardcoded to, before it became a setting. */
+export const DEFAULT_AUTO_START_SETTINGS: AutoStartSettings = {
+  autoStartBreaks: true,
+  autoStartNextFocus: false,
+};
+
 /**
- * Focus -> break auto-starts for every mode except Flow (idiomatic Pomodoro continuity).
- * Break -> next focus never auto-starts: resuming work is always a conscious action.
- * Flow's focus phase is a soft check-in interval, not a hard cutoff — it always halts
- * for a "Keep the flow?" decision instead of assuming a break was wanted.
+ * Focus -> break auto-starts per the `autoStartBreaks` setting, for every mode except
+ * Flow. Break -> next focus follows `autoStartNextFocus`. Flow's focus phase is a soft
+ * check-in interval, not a hard cutoff — it always halts for a "Keep the flow?" decision
+ * regardless of the setting, since Flow's whole premise is that breaks are deliberate.
  */
-export function autoStarts(nextPhase: TimerPhase, mode: TimerMode): boolean {
-  if (nextPhase === 'focus') return false;
-  return mode !== 'flow';
+export function autoStarts(
+  nextPhase: TimerPhase,
+  mode: TimerMode,
+  settings: AutoStartSettings = DEFAULT_AUTO_START_SETTINGS
+): boolean {
+  if (nextPhase === 'focus') return settings.autoStartNextFocus;
+  if (mode === 'flow') return false;
+  return settings.autoStartBreaks;
 }
 
 export interface CreateSessionParams {
@@ -140,7 +156,11 @@ export function finish(session: TimerSession, now: number): TimerSession {
  * to `now`, hits a boundary that requires a user decision (awaiting-start), or the whole
  * session completes (cyclesTarget reached).
  */
-export function reconcile(session: TimerSession, now: number): TimerSession {
+export function reconcile(
+  session: TimerSession,
+  now: number,
+  autoStartSettings: AutoStartSettings = DEFAULT_AUTO_START_SETTINGS
+): TimerSession {
   // Only a running session accrues wall-clock time to reconcile. A session that already
   // halted (awaiting-start), or is paused/completed/cancelled, has nothing further to
   // fast-forward — without this guard, calling reconcile() twice on an already-halted
@@ -178,7 +198,7 @@ export function reconcile(session: TimerSession, now: number): TimerSession {
       break;
     }
 
-    if (autoStarts(nextPhase, current.mode)) {
+    if (autoStarts(nextPhase, current.mode, autoStartSettings)) {
       current = {
         ...current,
         phase: nextPhase,
