@@ -131,7 +131,16 @@ export function continueFocus(session: TimerSession, extendMinutes: number, now:
   };
 }
 
+/**
+ * Guarded the same way finish() is (running/paused/awaiting-start only) — without this,
+ * a cancel() racing a tick-loop-driven reconcile() that just completed the same session
+ * (e.g. the phase boundary is crossed right as the user's Cancel tap lands) could flip an
+ * already-`completed` session back to `cancelled`, silently dropping it from every stat.
+ */
 export function cancel(session: TimerSession, now: number): TimerSession {
+  if (session.status !== 'running' && session.status !== 'paused' && session.status !== 'awaiting-start') {
+    return session;
+  }
   return { ...session, status: 'cancelled', accumulatedMs: computeElapsedMs(session, now), startedAt: null };
 }
 
@@ -168,7 +177,13 @@ export function reconcile(
   // body once more and double-count a phase completion.
   if (session.status !== 'running') return session;
 
-  let current = session;
+  // Defensive self-heal: every domain transition that sets status:'running' also sets
+  // startedAt, so this combination shouldn't occur — but if corrupted/stale state ever
+  // produces it, computeElapsedMs freezes at accumulatedMs forever (now - (null ?? now)
+  // = 0), isPhaseComplete never trips, and the session could never advance again. Treat
+  // it the same as a fresh resume() from right now: accumulatedMs is preserved, only the
+  // missing timestamp is corrected.
+  let current = session.startedAt == null ? { ...session, startedAt: now } : session;
 
   while (isPhaseComplete(current, now)) {
     const planned = durationMsForPhase(current, current.phase);

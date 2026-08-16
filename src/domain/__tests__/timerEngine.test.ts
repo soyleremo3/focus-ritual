@@ -132,6 +132,44 @@ describe('reconcile — multiple elapsed phase boundaries', () => {
   });
 });
 
+describe('reconcile — self-heals a corrupted running-but-no-startedAt session', () => {
+  it('heals to a fresh resume-from-now rather than fabricating elapsed time it cannot know', () => {
+    // Should never occur from any real domain transition, but if stale/corrupted state
+    // ever produces it, computeElapsedMs would freeze at accumulatedMs forever (nothing
+    // to add `now - startedAt` to), so isPhaseComplete would never trip and this session
+    // could never reconcile past this point without the self-heal. There's no valid
+    // startedAt to measure real elapsed time from, so healing anchors to *this* reconcile
+    // call's `now` (same as resume()) rather than guessing — accumulatedMs is kept as-is.
+    const corrupted: TimerSession = {
+      ...createSession({ id: 's1', mode: 'pomodoro', now: T0 }),
+      startedAt: null,
+      accumulatedMs: 20 * MIN,
+    };
+    const healedAt = T0 + 999 * MIN; // however much later this is first reconciled
+    const reconciled = reconcile(corrupted, healedAt);
+    expect(reconciled.status).toBe('running'); // 20min < 25min planned — not complete yet
+    expect(reconciled.phase).toBe('focus');
+    expect(reconciled.startedAt).not.toBeNull();
+    expect(computeElapsedMs(reconciled, healedAt)).toBe(20 * MIN);
+
+    // From here it behaves like any normal running session — a later reconcile advances it.
+    const further = reconcile(reconciled, healedAt + 6 * MIN);
+    expect(further.status).toBe('running');
+    expect(further.phase).toBe('break');
+  });
+
+  it('preserves the already-accumulated time exactly — the heal does not lose or add elapsed time', () => {
+    const corrupted: TimerSession = {
+      ...createSession({ id: 's1', mode: 'deepWork', now: T0 }),
+      startedAt: null,
+      accumulatedMs: 10 * MIN,
+    };
+    // now === the healed startedAt, so computeElapsedMs should read back exactly 10min.
+    const reconciled = reconcile(corrupted, T0 + 999 * MIN);
+    expect(computeElapsedMs(reconciled, T0 + 999 * MIN)).toBe(10 * MIN);
+  });
+});
+
 describe('reconcile — Flow Mode', () => {
   it('halts at the focus boundary instead of auto-starting a break', () => {
     const session = createSession({ id: 's1', mode: 'flow', now: T0 }); // 45min soft focus target
@@ -182,6 +220,28 @@ describe('cancel', () => {
     expect(cancelled.status).toBe('cancelled');
     expect(cancelled.accumulatedMs).toBe(3 * MIN);
     expect(cancelled.startedAt).toBeNull();
+  });
+
+  it('is a no-op once already completed — a cancel racing a completion must never revert it', () => {
+    const session = createSession({ id: 's1', mode: 'deepWork', now: T0 });
+    const completed = finish(session, T0 + 10 * MIN);
+    expect(cancel(completed, T0 + 11 * MIN)).toBe(completed);
+  });
+
+  it('is a no-op once already cancelled', () => {
+    const session = createSession({ id: 's1', mode: 'pomodoro', now: T0 });
+    const cancelled = cancel(session, T0 + MIN);
+    expect(cancel(cancelled, T0 + 2 * MIN)).toBe(cancelled);
+  });
+
+  it('still works from paused and from an awaiting-start halt', () => {
+    const session = createSession({ id: 's1', mode: 'pomodoro', now: T0 });
+    const paused = pause(session, T0 + MIN);
+    expect(cancel(paused, T0 + 5 * MIN).status).toBe('cancelled');
+
+    const halted = reconcile(createSession({ id: 's2', mode: 'flow', now: T0 }), T0 + 45 * MIN + 10_000);
+    expect(halted.status).toBe('awaiting-start');
+    expect(cancel(halted, T0 + 46 * MIN).status).toBe('cancelled');
   });
 });
 
