@@ -163,9 +163,13 @@ export async function migrate(db: Database): Promise<void> {
   for (const migration of pending) {
     await db.withTransactionAsync(async () => {
       await db.execAsync(migration.statements.join(';\n'));
+      // The version bump must commit atomically with its migration's statements — if it
+      // ran after this transaction closed, an app kill in that gap would leave the schema
+      // changed but the version stale, so the next launch re-applies the same migration
+      // and crashes (CREATE TABLE on an existing table, duplicate ALTER TABLE ADD COLUMN).
+      // PRAGMA doesn't accept bound parameters; the version is an internal integer we
+      // control, not user input, so string interpolation here is safe.
+      await db.execAsync(`PRAGMA user_version = ${migration.version}`);
     });
-    // PRAGMA doesn't accept bound parameters; the version is an internal integer we
-    // control, not user input, so string interpolation here is safe.
-    await db.execAsync(`PRAGMA user_version = ${migration.version}`);
   }
 }

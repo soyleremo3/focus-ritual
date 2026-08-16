@@ -1,4 +1,5 @@
 import { getSchemaVersion, migrate, MIGRATIONS } from '../schema';
+import type { Database } from '../types';
 import { createTestDatabase } from './testDatabase';
 
 describe('migrate', () => {
@@ -50,5 +51,37 @@ describe('migrate', () => {
     await migrate(db);
     await db.runAsync('INSERT INTO settings (id) VALUES (1)', []);
     await expect(db.runAsync('INSERT INTO settings (id) VALUES (2)', [])).rejects.toThrow();
+  });
+
+  it('writes PRAGMA user_version inside the same transaction as its migration statements', async () => {
+    // Regression: the version bump used to run in a separate execAsync call after the
+    // migration's own transaction had already committed. A process kill landing in that
+    // gap left the schema changed but the version stale, so the next launch re-applied
+    // the same migration and crashed (CREATE TABLE on an existing table, duplicate ALTER
+    // TABLE ADD COLUMN) — bricking the app until reinstall. Asserting the PRAGMA call
+    // happens before COMMIT proves there's no longer a gap for a kill to land in.
+    const calls: string[] = [];
+    const spyDb: Database = {
+      execAsync: async (source) => {
+        calls.push(`exec:${source}`);
+      },
+      runAsync: async () => ({ lastInsertRowId: 0, changes: 0 }),
+      getAllAsync: async () => [],
+      getFirstAsync: async <T>() => ({ user_version: 0 }) as T,
+      withTransactionAsync: async (task) => {
+        calls.push('BEGIN');
+        await task();
+        calls.push('COMMIT');
+      },
+    };
+
+    await migrate(spyDb);
+
+    const firstCommitIndex = calls.indexOf('COMMIT');
+    expect(firstCommitIndex).toBeGreaterThan(-1);
+    const callsBeforeFirstCommit = calls.slice(0, firstCommitIndex);
+    expect(callsBeforeFirstCommit.some((c) => c.includes(`PRAGMA user_version = ${MIGRATIONS[0]!.version}`))).toBe(
+      true
+    );
   });
 });
