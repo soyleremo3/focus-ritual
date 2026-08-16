@@ -13,6 +13,7 @@ import type { Ritual } from '@/domain/ritual/types';
 import { MODE_DEFAULTS, type TimerMode } from '@/domain/timer/types';
 import * as haptics from '@/lib/haptics';
 import { useRitualStore } from '@/store/ritualStore';
+import { useSettingsStore } from '@/store/settingsStore';
 import { useSoundStore } from '@/store/soundStore';
 import { useSpaceStore } from '@/store/spaceStore';
 import { useTaskStore } from '@/store/taskStore';
@@ -81,6 +82,10 @@ export function FocusScreen() {
   const soundPlay = useSoundStore((s) => s.play);
   const soundPause = useSoundStore((s) => s.pause);
   const applyRitualMix = useSoundStore((s) => s.applyRitualMix);
+
+  const pauseSoundWithTimer = useSettingsStore((s) => s.settings.pauseSoundWithTimer);
+  const defaultFocusMinutes = useSettingsStore((s) => s.settings.defaultFocusMinutes);
+  const defaultBreakMinutes = useSettingsStore((s) => s.settings.defaultBreakMinutes);
 
   const isSessionActive = session != null && ACTIVE_STATUSES.has(session.status);
 
@@ -213,18 +218,22 @@ export function FocusScreen() {
 
   const handleStart = () => {
     haptics.tap();
-    start(mode);
+    // Custom is the one mode meant for a user-defined duration when started standalone
+    // (no ritual) — every other mode's numbers are what define that mode, so they stay
+    // fixed at MODE_DEFAULTS.
+    const options = mode === 'custom' ? { focusMinutes: defaultFocusMinutes, breakMinutes: defaultBreakMinutes } : undefined;
+    start(mode, options);
     soundPlay();
   };
   const handlePause = () => {
     haptics.tap();
     pause();
-    soundPause();
+    if (pauseSoundWithTimer) soundPause();
   };
   const handleResume = () => {
     haptics.tap();
     resume();
-    soundPlay();
+    if (pauseSoundWithTimer) soundPlay();
   };
   const handleAdvancePhase = () => {
     haptics.select();
