@@ -4,6 +4,7 @@ import { getDatabase } from '@/db/client';
 import * as settingsRepo from '@/db/repositories/settingsRepo';
 import { clampVolume, effectiveVolume } from '@/domain/sound/soundEngine';
 import { soundEngine } from '@/lib/audio/soundEngine';
+import { findSoundDefinition } from '@/lib/audio/soundLibrary';
 
 export interface ActiveLayer {
   soundId: string;
@@ -11,6 +12,16 @@ export interface ActiveLayer {
 }
 
 const DEFAULT_LAYER_VOLUME = 0.7;
+
+/**
+ * Drops any layer whose soundId no longer exists in the bundled library. Without this, a
+ * persisted mix referencing a removed sound would load a "ghost" layer that SoundMixEditor
+ * can never render a row for (it only iterates the current library), so the user has no
+ * way to ever toggle it off — permanently stuck in the DB, re-serialized by every save.
+ */
+function filterKnownLayers(mix: ActiveLayer[]): ActiveLayer[] {
+  return mix.filter((layer) => findSoundDefinition(layer.soundId) != null);
+}
 
 interface SoundStoreState {
   activeMix: ActiveLayer[];
@@ -43,6 +54,15 @@ function persistMix(mix: ActiveLayer[], masterVolume: number): void {
     });
 }
 
+/**
+ * Set the moment any mutating action runs, before hydrate() has necessarily resolved.
+ * hydrate() checks this before applying its (by-then possibly stale) read — without it, a
+ * user toggling a layer on during a slow first boot could have that toggle silently
+ * reverted moments later when hydrate()'s earlier-queued read resolves and overwrites the
+ * store with the pre-toggle mix, leaving the DB, store, and engine all disagreeing.
+ */
+let hasMutatedSinceLoad = false;
+
 /** Holds only serializable UI state and delegates to the soundEngine singleton as a side effect — never holds AudioPlayer instances itself. */
 export const useSoundStore = create<SoundStoreState>()((set, get) => ({
   activeMix: [],
@@ -51,6 +71,7 @@ export const useSoundStore = create<SoundStoreState>()((set, get) => ({
   loaded: false,
 
   toggleLayer: (soundId) => {
+    hasMutatedSinceLoad = true;
     const { activeMix, masterVolume } = get();
     const isActive = activeMix.some((layer) => layer.soundId === soundId);
     const nextMix = isActive
@@ -67,15 +88,23 @@ export const useSoundStore = create<SoundStoreState>()((set, get) => ({
   },
 
   setLayerVolume: (soundId, volume) => {
+    hasMutatedSinceLoad = true;
+    const { masterVolume, activeMix } = get();
+    // A soundId absent from activeMix means its layer is mid-fade-out toward removal (or
+    // was never added) — calling soundEngine.setLayerVolume for it anyway would resurrect
+    // a player that's being torn down, with no UI row left to ever turn it back off. This
+    // is reachable via a queued VolumeBar gesture commit landing just after the layer was
+    // dropped (e.g. applyRitualMix swapping in a mix that no longer includes it).
+    if (!activeMix.some((layer) => layer.soundId === soundId)) return;
     const clamped = clampVolume(volume);
-    const { masterVolume } = get();
-    const nextMix = get().activeMix.map((layer) => (layer.soundId === soundId ? { ...layer, volume: clamped } : layer));
+    const nextMix = activeMix.map((layer) => (layer.soundId === soundId ? { ...layer, volume: clamped } : layer));
     set({ activeMix: nextMix });
     soundEngine.setLayerVolume(soundId, effectiveVolume(clamped, masterVolume));
     persistMix(nextMix, masterVolume);
   },
 
   setMasterVolume: (volume) => {
+    hasMutatedSinceLoad = true;
     const clamped = clampVolume(volume);
     const { activeMix } = get();
     set({ masterVolume: clamped });
@@ -84,14 +113,20 @@ export const useSoundStore = create<SoundStoreState>()((set, get) => ({
   },
 
   applyRitualMix: (layers) => {
+    hasMutatedSinceLoad = true;
     const { masterVolume } = get();
     set({ activeMix: layers });
     applyToEngine(layers, masterVolume);
   },
 
   restoreStandaloneMix: async () => {
+    hasMutatedSinceLoad = true;
     const db = await getDatabase();
-    const [mix, masterVolume] = await Promise.all([settingsRepo.getActiveSoundMix(db), settingsRepo.getMasterVolume(db)]);
+    const [rawMix, masterVolume] = await Promise.all([
+      settingsRepo.getActiveSoundMix(db),
+      settingsRepo.getMasterVolume(db),
+    ]);
+    const mix = filterKnownLayers(rawMix);
     set({ activeMix: mix, masterVolume });
     applyToEngine(mix, masterVolume);
   },
@@ -116,7 +151,19 @@ export const useSoundStore = create<SoundStoreState>()((set, get) => ({
 async function hydrate(): Promise<void> {
   try {
     const db = await getDatabase();
-    const [mix, masterVolume] = await Promise.all([settingsRepo.getActiveSoundMix(db), settingsRepo.getMasterVolume(db)]);
+    const [rawMix, masterVolume] = await Promise.all([
+      settingsRepo.getActiveSoundMix(db),
+      settingsRepo.getMasterVolume(db),
+    ]);
+    // A user can toggle a layer (or otherwise mutate the mix) before this slow first-boot
+    // read resolves — applying it at that point would silently revert their action: store
+    // and engine snap back to the pre-toggle mix while the DB (already rewritten by that
+    // mutation's own persistMix) keeps the new one, leaving all three in disagreement.
+    if (hasMutatedSinceLoad) {
+      useSoundStore.setState({ loaded: true });
+      return;
+    }
+    const mix = filterKnownLayers(rawMix);
     useSoundStore.setState({ activeMix: mix, masterVolume, loaded: true });
     applyToEngine(mix, masterVolume);
   } catch (error) {
