@@ -20,6 +20,12 @@ import {
 } from '@/domain/timer/timerEngine';
 import type { TimerMode, TimerSession } from '@/domain/timer/types';
 import * as haptics from '@/lib/haptics';
+import { planPhaseEndNotification } from '@/domain/notifications/notificationPlan';
+import {
+  cancelPhaseEndNotification,
+  ensureNotificationPermission,
+  schedulePhaseEndNotification,
+} from '@/lib/notifications/scheduler';
 import { useSettingsStore } from '@/store/settingsStore';
 
 const TICK_INTERVAL_MS = 300;
@@ -27,6 +33,26 @@ const TICK_INTERVAL_MS = 300;
 function currentAutoStartSettings(): AutoStartSettings {
   const { autoStartBreaks, autoStartNextFocus } = useSettingsStore.getState().settings;
   return { autoStartBreaks, autoStartNextFocus };
+}
+
+/**
+ * Reschedules (or cancels) the session's phase-end notification against a single fixed
+ * identifier — see scheduler.ts. Called after every state-changing action and every
+ * reconcile() call site (AppState foreground, cold-start hydrate, and the live tick-loop
+ * fix above), so pause/resume/reset/finish/cancel/app-restart/recovered-session all stay
+ * correct without any of them needing to track a notification ID themselves.
+ */
+function syncNotification(session: TimerSession | null, now: number): void {
+  const plan = session ? planPhaseEndNotification(session, now) : null;
+  if (!plan || !useSettingsStore.getState().settings.notificationsEnabled) {
+    void cancelPhaseEndNotification();
+    return;
+  }
+  ensureNotificationPermission()
+    .then((granted) => (granted ? schedulePhaseEndNotification(plan) : cancelPhaseEndNotification()))
+    .catch((error: unknown) => {
+      console.error('[timerStore] failed to sync notification', error);
+    });
 }
 
 interface StartOptions {
@@ -82,6 +108,7 @@ function startInterval() {
         useTimerStore.setState((state) => ({ session: reconciled, tick: state.tick + 1 }));
         if (reconciled.status !== 'running') stopInterval();
         persistSession(reconciled, now);
+        syncNotification(reconciled, now);
         haptics.success();
         return;
       }
@@ -122,6 +149,7 @@ export const useTimerStore = create<TimerStoreState>()((set, get) => ({
     set({ session });
     startInterval();
     persistSession(session, now);
+    syncNotification(session, now);
   },
 
   pause: () => {
@@ -132,6 +160,7 @@ export const useTimerStore = create<TimerStoreState>()((set, get) => ({
     set({ session: next });
     stopInterval();
     persistSession(next, now);
+    syncNotification(next, now);
   },
 
   resume: () => {
@@ -142,6 +171,7 @@ export const useTimerStore = create<TimerStoreState>()((set, get) => ({
     set({ session: next });
     startInterval();
     persistSession(next, now);
+    syncNotification(next, now);
   },
 
   advancePhase: () => {
@@ -152,6 +182,7 @@ export const useTimerStore = create<TimerStoreState>()((set, get) => ({
     set({ session: next });
     startInterval();
     persistSession(next, now);
+    syncNotification(next, now);
   },
 
   continueFocus: (extendMinutes) => {
@@ -162,6 +193,7 @@ export const useTimerStore = create<TimerStoreState>()((set, get) => ({
     set({ session: next });
     startInterval();
     persistSession(next, now);
+    syncNotification(next, now);
   },
 
   cancel: () => {
@@ -172,6 +204,7 @@ export const useTimerStore = create<TimerStoreState>()((set, get) => ({
     set({ session: next });
     stopInterval();
     persistSession(next, now);
+    syncNotification(next, now);
   },
 
   finish: () => {
@@ -182,6 +215,7 @@ export const useTimerStore = create<TimerStoreState>()((set, get) => ({
     set({ session: next });
     stopInterval();
     persistSession(next, now);
+    syncNotification(next, now);
   },
 }));
 
@@ -204,6 +238,7 @@ AppState.addEventListener('change', (next: AppStateStatus) => {
       useTimerStore.setState({ session: reconciled });
       if (reconciled.status === 'running') startInterval();
       persistSession(reconciled, now);
+      syncNotification(reconciled, now);
     }
   }
 });
@@ -225,6 +260,7 @@ async function hydrate(): Promise<void> {
     useTimerStore.setState({ session: reconciled });
     if (reconciled.status === 'running') startInterval();
     await upsertSession(db, reconciled, now);
+    syncNotification(reconciled, now);
   } catch (error) {
     console.error('[timerStore] failed to hydrate session', error);
   }
