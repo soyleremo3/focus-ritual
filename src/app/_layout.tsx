@@ -38,9 +38,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="rituals/new" options={{ presentation: 'modal' }} />
           <Stack.Screen name="rituals/[id]" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="spaces/index" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="spaces/new" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="spaces/[id]" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="spaces" options={{ presentation: 'modal' }} />
         </Stack>
       </ThemeProvider>
     </GestureHandlerRootView>

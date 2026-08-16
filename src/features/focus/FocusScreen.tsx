@@ -174,10 +174,7 @@ export function FocusScreen() {
   };
   const handleOpenSpaces = () => {
     haptics.tap();
-    // expo-router's typed routes don't collapse a plain (non-group) folder's index.tsx
-    // to a bare "/spaces" href the way it does for (tabs) routes — the fully-qualified
-    // path is the one the generated types actually expose.
-    router.push('/spaces/index');
+    router.push('/spaces');
   };
 
   const currentPhaseMinutes = session
