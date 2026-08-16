@@ -3,8 +3,10 @@ import {
   cancel,
   computeElapsedMs,
   computeRemainingMs,
+  computeTotalFocusMs,
   continueFocus,
   createSession,
+  finish,
   isPhaseComplete,
   pause,
   reconcile,
@@ -179,6 +181,93 @@ describe('cancel', () => {
     expect(cancelled.status).toBe('cancelled');
     expect(cancelled.accumulatedMs).toBe(3 * MIN);
     expect(cancelled.startedAt).toBeNull();
+  });
+});
+
+describe('bankedFocusMs / computeTotalFocusMs', () => {
+  it('starts at 0 and stays 0 while nothing has closed out a focus phase yet', () => {
+    const session = createSession({ id: 's1', mode: 'pomodoro', now: T0 });
+    expect(session.bankedFocusMs).toBe(0);
+    expect(computeTotalFocusMs(session, T0 + 10 * MIN)).toBe(10 * MIN);
+  });
+
+  it('a break phase does not contribute to total focus time', () => {
+    const session = createSession({ id: 's1', mode: 'pomodoro', now: T0 });
+    const onBreak = reconcile(session, T0 + 25 * MIN + 30_000); // completes focus, auto-starts break
+    expect(onBreak.phase).toBe('break');
+    expect(onBreak.bankedFocusMs).toBe(25 * MIN);
+    // 3 more minutes elapse into the break — must not add to focus time.
+    expect(computeTotalFocusMs(onBreak, T0 + 25 * MIN + 30_000 + 3 * MIN)).toBe(25 * MIN);
+  });
+
+  it('accumulates across every focus phase of a multi-cycle session, not just the last one', () => {
+    // cyclesTarget: 1 pomodoro = one full focus+break cycle before completing.
+    const session = createSession({ id: 's1', mode: 'pomodoro', now: T0, cyclesTarget: 1 });
+    const now = T0 + 25 * MIN + 5 * MIN + MIN; // locked through focus + break + 1 extra minute
+    const completed = reconcile(session, now);
+    expect(completed.status).toBe('completed');
+    // Only the 25-minute focus phase counts — the 5-minute break that followed does not,
+    // even though accumulatedMs itself reflects the break (the *last* phase touched).
+    expect(completed.bankedFocusMs).toBe(25 * MIN);
+    expect(computeTotalFocusMs(completed, now)).toBe(25 * MIN);
+  });
+
+  it('is preserved (not reset) by a pause/resume within the same focus phase', () => {
+    const session = createSession({ id: 's1', mode: 'deepWork', now: T0 });
+    const paused = pause(session, T0 + 10 * MIN);
+    const resumed = resume(paused, T0 + 20 * MIN);
+    expect(computeTotalFocusMs(resumed, T0 + 25 * MIN)).toBe(15 * MIN); // 10 before pause + 5 after resume
+  });
+
+  it('reconciling an already-completed session twice never double-counts bankedFocusMs', () => {
+    const session = createSession({ id: 's1', mode: 'pomodoro', now: T0, cyclesTarget: 1 });
+    const now = T0 + 25 * MIN + 5 * MIN + MIN;
+    const once = reconcile(session, now);
+    const twice = reconcile(once, T0 + 999 * MIN);
+    expect(twice).toBe(once); // short-circuited by the status guard, not just numerically equal
+    expect(twice.bankedFocusMs).toBe(25 * MIN);
+  });
+});
+
+describe('finish', () => {
+  it('marks an open-ended running session completed and banks its live elapsed time', () => {
+    const session = createSession({ id: 's1', mode: 'deepWork', now: T0 });
+    const finished = finish(session, T0 + 32 * MIN);
+    expect(finished.status).toBe('completed');
+    expect(finished.startedAt).toBeNull();
+    expect(finished.accumulatedMs).toBe(32 * MIN);
+    expect(computeTotalFocusMs(finished, T0 + 32 * MIN)).toBe(32 * MIN);
+  });
+
+  it('works from paused without losing the frozen elapsed time', () => {
+    const session = createSession({ id: 's1', mode: 'stopwatch', now: T0 });
+    const paused = pause(session, T0 + 8 * MIN);
+    const finished = finish(paused, T0 + 500 * MIN); // long after pausing — must not count the gap
+    expect(finished.status).toBe('completed');
+    expect(finished.accumulatedMs).toBe(8 * MIN);
+  });
+
+  it('works from an awaiting-start phase boundary (e.g. Flow\'s "keep the flow?" halt)', () => {
+    const session = createSession({ id: 's1', mode: 'flow', now: T0 });
+    const halted = reconcile(session, T0 + 45 * MIN + 10_000); // halts awaiting-start, phase still 'focus'
+    const finished = finish(halted, T0 + 46 * MIN);
+    expect(finished.status).toBe('completed');
+    expect(computeTotalFocusMs(finished, T0 + 46 * MIN)).toBe(45 * MIN);
+  });
+
+  it('finishing while paused on a break phase does not credit that time as focus time', () => {
+    const session = createSession({ id: 's1', mode: 'pomodoro', now: T0 });
+    const onBreak = reconcile(session, T0 + 25 * MIN + 30_000);
+    const pausedOnBreak = pause(onBreak, T0 + 25 * MIN + 30_000 + 2 * MIN);
+    const finished = finish(pausedOnBreak, T0 + 999 * MIN);
+    expect(finished.phase).toBe('break');
+    expect(computeTotalFocusMs(finished, T0 + 999 * MIN)).toBe(25 * MIN); // only the focus phase before it
+  });
+
+  it('is a no-op once already completed or cancelled', () => {
+    const session = createSession({ id: 's1', mode: 'deepWork', now: T0 });
+    const cancelled = cancel(session, T0 + MIN);
+    expect(finish(cancelled, T0 + 999 * MIN)).toBe(cancelled);
   });
 });
 

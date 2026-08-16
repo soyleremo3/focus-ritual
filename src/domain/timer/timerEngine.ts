@@ -13,6 +13,18 @@ export function computeElapsedMs(session: TimerSession, now: number): number {
   return session.accumulatedMs + (now - (session.startedAt ?? now));
 }
 
+/**
+ * Total focus-phase time across the session's entire lifetime, not just the current
+ * phase — bankedFocusMs (every previously closed focus segment) plus whatever's live in
+ * the current phase right now, if that phase happens to be 'focus'. For a terminal
+ * session (completed/cancelled), `now` is irrelevant since computeElapsedMs falls back to
+ * the frozen accumulatedMs — safe to call with any timestamp when reading history.
+ */
+export function computeTotalFocusMs(session: TimerSession, now: number): number {
+  const currentPhaseFocusMs = session.phase === 'focus' ? computeElapsedMs(session, now) : 0;
+  return session.bankedFocusMs + currentPhaseFocusMs;
+}
+
 export function computeRemainingMs(session: TimerSession, now: number): number | null {
   const planned = durationMsForPhase(session, session.phase);
   if (planned == null) return null;
@@ -44,6 +56,7 @@ export interface CreateSessionParams {
   mode: TimerMode;
   now: number;
   ritualId?: string | null;
+  taskId?: string | null;
   focusMinutes?: number | null;
   breakMinutes?: number | null;
   cyclesTarget?: number | null;
@@ -54,15 +67,18 @@ export function createSession(params: CreateSessionParams): TimerSession {
   return {
     id: params.id,
     ritualId: params.ritualId ?? null,
+    taskId: params.taskId ?? null,
     mode: params.mode,
     phase: 'focus',
     status: 'running',
     startedAt: params.now,
     accumulatedMs: 0,
+    bankedFocusMs: 0,
     focusMinutes: params.focusMinutes ?? defaults.focusMinutes,
     breakMinutes: params.breakMinutes ?? defaults.breakMinutes,
     cyclesTarget: params.cyclesTarget ?? defaults.cyclesTarget,
     cyclesCompleted: 0,
+    createdAt: params.now,
   };
 }
 
@@ -104,6 +120,20 @@ export function cancel(session: TimerSession, now: number): TimerSession {
 }
 
 /**
+ * Marks the session done *as a deliberate choice*, not a discard — the counterpart to
+ * cancel() for every open-ended mode (Deep Work, 90-minute, Stopwatch, Flow, Custom
+ * without a cycle target) that reconcile() can never naturally mark 'completed', since
+ * there's no cyclesTarget to reach. Available from running, paused, or a halted
+ * phase-boundary decision — banks whatever's currently elapsed and stops there.
+ */
+export function finish(session: TimerSession, now: number): TimerSession {
+  if (session.status !== 'running' && session.status !== 'paused' && session.status !== 'awaiting-start') {
+    return session;
+  }
+  return { ...session, status: 'completed', accumulatedMs: computeElapsedMs(session, now), startedAt: null };
+}
+
+/**
  * Deterministic reconciliation over every elapsed phase boundary — not a single check.
  * The phone could have been locked long enough to span more than one transition (focus
  * ends, break auto-starts, break also ends before foreground). Loops until it catches up
@@ -127,12 +157,21 @@ export function reconcile(session: TimerSession, now: number): TimerSession {
     const overshootMs = computeElapsedMs(current, now) - planned;
     const nextPhase = otherPhase(current.phase);
     const cyclesCompleted = current.phase === 'focus' ? current.cyclesCompleted + 1 : current.cyclesCompleted;
+    // Bank the just-closed phase's duration into bankedFocusMs only when it was focus —
+    // but only for branches that actually move `phase` away from it (auto-start,
+    // completed). The awaiting-start branch below leaves `phase` unchanged, so
+    // computeTotalFocusMs's own "current phase is focus" check already accounts for that
+    // frozen accumulatedMs; bumping bankedFocusMs there too would double-count it (this is
+    // exactly Flow Mode's halt-on-focus-completion case, the one place this branch closes
+    // out a focus phase instead of a break).
+    const bankedFocusMs = current.phase === 'focus' ? current.bankedFocusMs + planned : current.bankedFocusMs;
 
     if (nextPhase === 'focus' && current.cyclesTarget != null && cyclesCompleted >= current.cyclesTarget) {
       current = {
         ...current,
         status: 'completed',
         cyclesCompleted,
+        bankedFocusMs,
         accumulatedMs: planned,
         startedAt: null,
       };
@@ -145,6 +184,7 @@ export function reconcile(session: TimerSession, now: number): TimerSession {
         phase: nextPhase,
         status: 'running',
         cyclesCompleted,
+        bankedFocusMs,
         accumulatedMs: 0,
         startedAt: now - overshootMs,
       };
@@ -154,6 +194,10 @@ export function reconcile(session: TimerSession, now: number): TimerSession {
         ...current,
         status: 'awaiting-start',
         cyclesCompleted,
+        // Not `bankedFocusMs` — phase is unchanged by this branch, so if it's 'focus'
+        // (Flow's halt-on-focus-completion), computeTotalFocusMs already picks up this
+        // frozen accumulatedMs via its own current-phase check. Bumping here too would
+        // double-count it.
         accumulatedMs: planned,
         startedAt: null,
       };
