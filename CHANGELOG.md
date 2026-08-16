@@ -8,6 +8,39 @@ semantic versioning until a `1.0.0` release.
 
 ## [Unreleased]
 
+### Phase 3 — Focus Rituals
+
+#### Added
+
+- `domain/ritual`: `Ritual`/`RitualSoundLayer` types, `sortRituals` (favorites, then
+  most-recently-used, then newest), `duplicateRitualName` (collision-avoiding
+  "(Copy)"/"(Copy N)"), and the `ritualToSessionStart`/`ritualToActiveMix` mappers.
+- `ritualsRepo`: full local CRUD — create/update (transactionally replace sound layers,
+  not merge), duplicate, soft delete (archive), favorite toggle, mark-used — plus
+  `countAllRituals` (includes archived, distinct from the active-only `countRituals`).
+- `seedExampleRituals.ts`: 3 example rituals (one per bundled scene), seeded once on the
+  very first run and never resurrected after the user deletes them.
+- `ritualStore`: wraps `ritualsRepo`, keeps a `sortRituals`-ordered in-memory cache.
+- `RitualsListScreen`, `RitualCard`, `RitualEditorScreen` (`rituals/new` and
+  `rituals/[id]` modal routes) — create, edit, duplicate, delete, and favorite from the
+  Rituals tab.
+- Start-from-ritual on the Focus screen: loads the ritual's saved space and sound mix and
+  starts the timer with its mode/durations — and restores the same scene/mix on
+  cold-start recovery, not just an explicit start.
+- `VolumeBar` promoted from a `SoundMixerSheet`-private component to a shared primitive,
+  reused by the ritual editor's (local, non-live) sound-mix draft.
+
+#### Fixed
+
+- `countAllRituals` added specifically because the example-ritual seed's original
+  "seed if `countRituals() === 0`" check would have resurrected the 3 examples after a
+  user deleted all of them (soft delete brings the *active* count back to 0, but the
+  seed should only ever run once, ever).
+- `.wasm` registered as a Metro asset extension (`metro.config.js`) — expo-sqlite's web
+  implementation was crashing the web bundle at import time, a Metro/expo-sqlite
+  web-packaging gap unrelated to application code, but one that blocked using the browser
+  preview to verify anything once a screen touched the database.
+
 ### Phase 2 — Persistence Foundation
 
 #### Added
