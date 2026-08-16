@@ -28,7 +28,13 @@ no API keys, no analytics, no paid services.
   chart, weekly rhythm, favorite ritual, best focus time of day, and ritual/task
   breakdowns, all derived from persisted sessions with no charting dependency (see
   [History & Statistics](#history--statistics) below)
-- **Local notifications and haptics** *(notifications: Phase 7; haptics: built now)*
+- **Local notifications and haptics** — a phase-end alert scheduled/cancelled alongside
+  every timer action, permission requested gracefully on first need, and every haptic
+  gated by a single setting (see [Notifications & Settings](#notifications--settings)
+  below)
+- **Settings** — appearance, timer defaults, auto-start behavior, notification/haptic/
+  sound preferences, and stats' week-starts-on, all persisted locally (see
+  [Notifications & Settings](#notifications--settings) below)
 
 ## Tech stack
 
@@ -71,7 +77,7 @@ FocusRitual/
     generate-sound-assets.mjs   regenerates the bundled ambient loops
   src/
     app/                        expo-router routes (thin; import from features/)
-      _layout.tsx                providers, splash hold, audio mode setup
+      _layout.tsx                providers, splash hold, audio mode + notification setup
       (tabs)/                    Focus | Rituals | Tasks | History | Settings
       rituals/new.tsx             modal — create
       rituals/[id].tsx            modal — edit
@@ -95,12 +101,16 @@ FocusRitual/
                                   Ambient sound mixer below) + selectLockScreenOwner
       task/                      Task types + isValidTaskTitle/sortTasks/nextSortOrder
       stats/                     statsAggregation.ts (see History & Statistics below)
+      notifications/             planPhaseEndNotification() — pure "what to schedule" (see
+                                  Notifications & Settings below)
     store/                      Zustand — one small store per concern, not one mega-store
-      timerStore.ts              owns the AppState subscription + refresh interval + persistence
+      timerStore.ts              owns the AppState subscription + refresh interval +
+                                  persistence + notification sync
       soundStore.ts              serializable UI state only, delegates to soundEngine
       ritualStore.ts              wraps ritualsRepo, keeps a sorted in-memory cache
       spaceStore.ts               wraps spacesRepo + settingsRepo (see Focus Spaces below)
       taskStore.ts                wraps tasksRepo, keeps a sortTasks-ordered in-memory cache
+      settingsStore.ts            wraps settingsRepo's AppSettings, hydrated once at load
     theme/                      design system — tokens, motion, palettes, ThemeProvider
       scenePalettes.ts            3 hand-authored bundled scenes + shared PaletteColors
       moodPalettes.ts             6 mood palettes for custom-photo spaces
@@ -113,16 +123,16 @@ FocusRitual/
                                   ritual editor's sound-mix draft
       tasks/                     TodayScreen, TaskCard
       history/                   HistoryScreen, SummaryCard, Bar, BreakdownList, SessionListItem
+      settings/                  SettingsScreen
     components/                 shared, theme-aware UI primitives
+      Toggle.tsx                  the app's one boolean-setting switch
     lib/                        imperative wrappers around native/expo modules
       audio/soundEngine.ts       thin expo-audio wrapper around domain/sound's engine core
       imagePicker.ts             picks + copies a photo into persistent app storage
-      haptics.ts
+      haptics.ts                  gates every haptic by the hapticsEnabled setting
+      notifications/scheduler.ts  thin expo-notifications wrapper around
+                                   domain/notifications' pure plan (see below)
 ```
-
-Not created yet — a `settingsStore` (UI-facing; `settingsRepo` itself already exists and
-is used directly by `spaceStore`/`soundStore`) and `lib/notifications/scheduler.ts`. Each
-arrives with its own phase below rather than being pre-stubbed.
 
 ## Timer engine
 
@@ -138,11 +148,26 @@ could have been locked long enough to span more than one transition. It fast-for
 through any number of auto-started breaks, but always halts at the next boundary that
 needs a human decision (`status: 'awaiting-start'`) rather than guessing intent:
 
-- Focus → break auto-starts for every mode except Flow.
-- Break → next focus never auto-starts — resuming work is a conscious action.
+- Focus → break auto-starts by default (`autoStartBreaks`, Settings — Phase 7); disabling
+  it halts at that boundary for a "Start Break" decision instead.
+- Break → next focus never auto-starts by default (`autoStartNextFocus`, Settings — Phase
+  7); resuming work is a conscious action unless the setting says otherwise.
 - Flow's focus phase is a soft check-in interval: it always halts for a **"Keep the
-  flow?"** decision (keep going, extending the target, or take a break) instead of
-  assuming a break was wanted.
+  flow?"** decision (keep going, extending the target, or take a break) regardless of
+  `autoStartBreaks` — Flow's whole premise is that breaks are deliberate, never assumed.
+
+`autoStarts()`/`reconcile()` take an optional `AutoStartSettings` (defaulting to the two
+bullets above, so every pre-Phase-7 call site and test is unaffected), threaded through by
+`timerStore` from the persisted setting.
+
+**Foreground completion (Phase 7 fix)**: `reconcile()` used to run only on an AppState
+background→foreground transition and cold-start `hydrate()` — the live ~300ms tick loop
+just re-rendered. A session that stayed foregrounded for its *entire* duration (the common
+case — someone watching the ring count down) never left `'running'` on its own: the clock
+hit 00:00 and froze there, Pause/Cancel/Finish still showing, until the app happened to be
+backgrounded and re-foregrounded. The tick loop now checks `isPhaseComplete()` and
+reconciles right there when true — the same `haptics.success()` fires only from this live
+path, since a background/foreground or cold-start reconcile means the user wasn't looking.
 
 `reconcile()` is idempotent: calling it again on a session that already halted
 (`awaiting-start`, `paused`, `completed`, or `cancelled`) is a guaranteed no-op — only a
@@ -385,6 +410,65 @@ cache-first through the existing stores, falling back to a direct DB read that i
 archived rituals (`ritualsRepo.getRitualById` was never active-only) — a deleted ritual a
 historical session referenced still shows its real name instead of a placeholder.
 
+## Notifications & Settings
+
+**Settings persistence.** `settingsRepo.getSettings()`/`updateSettings()` (Phase 7)
+consolidate the `settings` table's app-level columns into one `AppSettings` type —
+`themeMode`, `hapticsEnabled`, `notificationsEnabled`, `weekStartsOn`,
+`defaultFocusMinutes`, `defaultBreakMinutes`, `autoStartBreaks`, `autoStartNextFocus`,
+`pauseSoundWithTimer`. `updateSettings()` writes only the fields passed in, via a static
+column map (not dynamic SQL from arbitrary keys). `settingsStore` wraps it with the same
+hydrate-once-at-module-load pattern as `soundStore`/`timerStore`, plus an optimistic
+`update()` so Settings toggles feel instant. `default_ritual_id` and `onboarding_complete`
+stay in the schema/`SettingsRow` but deliberately outside `AppSettings` — neither has a
+feature to attach to (no "start default ritual" quick action, no onboarding flow), so
+surfacing them would be UI for something that doesn't exist yet.
+
+**What reads from it, now that hardcoded defaults are gone:**
+- `ThemeProvider` resolves `colorScheme` from `themeMode` (`'light'`/`'dark'` override
+  `useColorScheme()`; `'system'`, the default, defers to it exactly as before).
+- `HistoryScreen` passes `weekStartsOn` into `startOfWeek()`/`weeklyRhythm()` — the domain
+  layer already accepted this parameter (since Phase 6); nothing read it from settings
+  until now.
+- `timerStore` threads `autoStartBreaks`/`autoStartNextFocus` into every `reconcile()`
+  call (see [Timer engine](#timer-engine) above) and gates `handleStart`'s Custom-mode
+  minutes on `defaultFocusMinutes`/`defaultBreakMinutes` — the one mode meant for a
+  user-defined duration when started standalone; every other mode's numbers are what
+  define that mode, so they stay fixed at `MODE_DEFAULTS`.
+- `FocusScreen`'s pause/resume only touch ambient sound when `pauseSoundWithTimer` is on.
+- `haptics.ts` checks `hapticsEnabled` before every `tap()`/`select()`/`success()` call —
+  one gate instead of touching each of the ~15 call sites individually.
+
+**Notifications.** `domain/notifications/notificationPlan.ts`'s `planPhaseEndNotification
+(session, now)` is pure and unit-tested: given a session, what (if anything) should be
+scheduled for its *current phase's* end — `null` when not running, when this phase has no
+planned duration (stopwatch), or once the boundary's already passed. `lib/notifications/
+scheduler.ts` is the thin, untested expo-notifications wrapper around it: an Android
+notification channel set up once at launch (no permission needed), a permission check that
+only prompts when genuinely undetermined and never re-prompts after a denial, and schedule/
+cancel against a **single fixed identifier** — a session's phase-end notification is always
+singular, so cancel-then-reschedule against that one ID is correct with no identifier ever
+persisted or tracked, even against a notification that already fired (cancelling something
+already-fired/nonexistent is a harmless no-op).
+
+`timerStore`'s `syncNotification()` runs after every state-changing action
+(start/pause/resume/advancePhase/continueFocus/cancel/finish) and every `reconcile()` call
+site (AppState-foreground, cold-start `hydrate()`, and the live tick-loop fix above) — the
+same set of places that already mutate session state — so pause/resume/reset/finish/
+cancel/app-restart/recovered-session all reschedule or cancel correctly. Permission denial
+or an unsupported platform (web has no scheduled-notification API, only permissions) never
+blocks a timer action — `ensureNotificationPermission()` swallows failures and returns
+`false`, and `ERR_UNAVAILABLE` specifically is logged only once as expected, not as an
+error, so it doesn't spam the console on every action on a platform that will never support
+it.
+
+**Settings screen.** `features/settings/SettingsScreen.tsx` — Appearance (theme `Chip`
+row), Timer Defaults (`NumberField` × 2, reused from `features/rituals/`, backed by a
+local draft so the field can go briefly empty mid-edit without snapping back + two
+auto-start `Toggle`s), Notifications/Haptics/Sound (`Toggle` rows), and Statistics
+(week-starts-on `Chip` row). `components/Toggle.tsx` is new — no `Switch`/`Toggle`
+precedent existed yet in this codebase.
+
 ## Neutral chrome vs. scene palettes
 
 `ThemeProvider` exposes two independent palettes: a **neutral chrome palette**
@@ -445,9 +529,20 @@ change and fixed before it shipped — see [Timer engine](#timer-engine) above).
 [History & Statistics](#history--statistics) above. Cancelled sessions stay visible in
 History (marked "Cancelled") but are excluded from every stat.
 
-**Phase 7 — Notifications, haptics polish, Settings.** Full local-notification scheduling
-for session completion (idempotent cancel-and-reschedule on every pause/resume/skip, the
-same pattern as the timer's own reconciliation), a Settings screen, a haptics pass.
+**Phase 7 — Notifications, haptics polish, Settings.** ✅ Migration v5 (5 new settings
+columns) + `settingsRepo.getSettings()`/`updateSettings()` + `settingsStore`;
+`domain/notifications/notificationPlan.ts` (pure) + `lib/notifications/scheduler.ts`
+(expo-notifications wrapper, single fixed identifier, graceful permission handling);
+`timerStore.syncNotification()` wired into every session-mutating action and every
+`reconcile()` call site; `autoStarts()`/`reconcile()` made settings-driven; `haptics.ts`
+gated by `hapticsEnabled` with `success()` wired into live phase completion and `finish()`;
+`ThemeProvider`/`HistoryScreen` wired to `themeMode`/`weekStartsOn`; `FocusScreen` wired to
+`pauseSoundWithTimer` and Custom-mode default minutes; `Toggle` component;
+`SettingsScreen`. Also fixed a real pre-existing bug found while wiring this phase — the
+foreground tick loop never called `reconcile()`, so a session left running with the app
+open the whole time froze at 00:00 instead of completing (see
+[Timer engine](#timer-engine) above). See
+[Notifications & Settings](#notifications--settings) above.
 
 **Phase 8 — Hardening.** AppState/lock edge cases, Android sustained-background-audio
 verification, accessibility (dynamic type, contrast against arbitrary user photos),
@@ -455,20 +550,22 @@ performance pass.
 
 ## Verification
 
-Before Phase 7 begins, all of the following must pass:
+Before Phase 8 begins, all of the following must pass:
 
 1. `npm run typecheck`, `npm run lint`, `npx expo-doctor` — all clean.
-2. `npm test` — passes, including `domain/timer/timerEngine` (now covering `finish()` and
-   `bankedFocusMs` across pause/resume/multi-cycle/Flow-halt scenarios), `domain/palette/
+2. `npm test` — passes, including `domain/timer/timerEngine` (now covering `finish()`,
+   `bankedFocusMs`, and settings-driven auto-start across pause/resume/multi-cycle/
+   Flow-halt scenarios), `domain/notifications/notificationPlan`, `domain/palette/
    paletteContrast`, `domain/ritual/ritual`, `domain/space/space`, `domain/task/task`,
    `domain/stats/statsAggregation`, `domain/sound/soundEngine` (fake-timer-driven: no
    duplicate players, fade-out-before-release, cancel-pending-removal-on-re-add, sticky
    lock-screen ownership), `theme/spacePalette`, and every `db/__tests__` suite
-   (migrations, `sessionsRepo` including `listTerminalSessions` and the
+   (migrations through v5, `sessionsRepo` including `listTerminalSessions` and the
    repeated-upsert-never-double-records case, `ritualsRepo`, `spacesRepo`, `tasksRepo`
-   (including the delete-safely-unlinks-a-session case), `settingsRepo`, bundled-data seed
-   idempotency, example-ritual seed idempotency — run against a real `node:sqlite`-backed
-   database, not a hand-rolled mock).
+   (including the delete-safely-unlinks-a-session case), `settingsRepo` (including
+   `getSettings`/`updateSettings` round-trips), bundled-data seed idempotency,
+   example-ritual seed idempotency — run against a real `node:sqlite`-backed database, not
+   a hand-rolled mock).
 3. In the Expo (web) preview: Focus tab renders correctly (hero timer, scene backdrop, all
    6 modes); Rituals tab shows the 3 seeded examples; create/edit/duplicate/delete/favorite
    all work and the list re-sorts correctly; starting a ritual switches to the Focus tab
@@ -486,9 +583,24 @@ Before Phase 7 begins, all of the following must pass:
    button correctly completes an open-ended session (Deep Work/Stopwatch/Flow) instead of
    only ever being cancellable; the History tab shows Today/Week/Month summaries, the
    7-day and weekly-rhythm bar charts, and ritual/task breakdowns that update after a
-   session finishes; the Settings tab still renders its empty state without crashing.
+   session finishes; the Settings tab renders every section, every toggle/chip persists
+   and takes effect immediately (theme switches live app-wide, week-starts-on reorders the
+   History charts), and a Custom-mode default-minutes change correctly changes the next
+   standalone Custom session's duration; no console errors during any of the above (a real
+   noise bug — `ERR_UNAVAILABLE` logged as an error on every timer action on web, since web
+   has no scheduled-notification API — was caught this way and fixed, see the Phase 7 entry
+   below).
 4. **Real-device smoke tests on a real Android device** (a dev client build if Expo Go
    can't reproduce the native behavior being tested):
+   - Enable notifications in Settings, start a Pomodoro, background the app before the
+     focus phase ends — the phase-end notification fires at the correct time even though
+     the app isn't foregrounded (this is the one Phase 7 path the web preview cannot
+     exercise at all, since local scheduled notifications have no web implementation).
+   - Pause, then resume, a running timer with notifications enabled — the notification
+     reschedules for the new remaining time rather than firing at the original time or not
+     firing at all.
+   - Deny the notification permission prompt — the app continues to function normally with
+     no blocking dialog, error, or crash anywhere in the timer flow.
    - Start a timer, lock/background the phone, foreground it — elapsed time reconciles
      correctly with no drift or double-counting.
    - Start a timer, force-quit the app, relaunch it — the session recovers with elapsed

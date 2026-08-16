@@ -8,6 +8,62 @@ semantic versioning until a `1.0.0` release.
 
 ## [Unreleased]
 
+### Phase 7 — Notifications, Haptics Polish & Settings
+
+#### Added
+
+- Migration v5: `default_focus_minutes`, `default_break_minutes`, `auto_start_breaks`,
+  `auto_start_next_focus`, `pause_sound_with_timer`. `settingsRepo.getSettings()`/
+  `updateSettings()` consolidate these plus the previously-dormant `theme_mode`/
+  `haptics_enabled`/`notifications_enabled`/`week_starts_on` into one `AppSettings` type.
+  `default_ritual_id`/`onboarding_complete` stay dormant — no feature to attach them to.
+- `settingsStore` — hydrated once at module load like `soundStore`/`timerStore`, with an
+  optimistic `update()`.
+- `domain/timer/timerEngine`: `autoStarts()`/`reconcile()` take an optional
+  `AutoStartSettings` (`autoStartBreaks`, `autoStartNextFocus`), defaulting to the
+  previously-hardcoded behavior so every existing call site is unaffected. Flow mode's
+  break decision stays deliberate regardless of the setting.
+- `domain/notifications/notificationPlan.ts`: pure `planPhaseEndNotification(session, now)`
+  — what (if anything) to schedule for the session's current phase end. Unit-tested
+  independently of the expo-notifications wrapper around it.
+- `lib/notifications/scheduler.ts`: Android notification channel setup, graceful
+  permission check/request (never blocks a timer action), and schedule/cancel against a
+  single fixed identifier — no notification ID ever needs to be persisted or tracked.
+- `timerStore.syncNotification()`, called after every session-mutating action
+  (start/pause/resume/advancePhase/continueFocus/cancel/finish) and every `reconcile()`
+  call site, so pause/resume/reset/finish/cancel/app-restart/recovered-session all
+  reschedule or cancel the phase-end notification correctly.
+- `haptics.ts` now checks `hapticsEnabled` before every call — one gate instead of editing
+  each of the ~15 existing call sites. `success()` (previously defined but never called)
+  is wired into `FocusScreen`'s Finish action and into live (foregrounded) phase
+  completion — never into background/cold-start reconcile, since the user wasn't looking.
+- `ThemeProvider` reads `themeMode` to override `useColorScheme()`; `HistoryScreen` reads
+  `weekStartsOn` for `startOfWeek()`/`weeklyRhythm()` (the domain layer already accepted
+  this parameter since Phase 6, nothing read it from settings until now).
+- `FocusScreen`: pause/resume only touch ambient sound when `pauseSoundWithTimer` is on;
+  starting Custom mode standalone uses `defaultFocusMinutes`/`defaultBreakMinutes` instead
+  of the fixed `MODE_DEFAULTS.custom` (25/5) — the one mode meant for a user-defined
+  duration outside a saved Ritual.
+- `components/Toggle.tsx` — a minimal switch; no `Switch`/`Toggle` precedent existed yet.
+- `features/settings/SettingsScreen.tsx` — Appearance, Timer Defaults, Notifications,
+  Haptics, Sound, and Statistics sections, replacing the Settings tab's `EmptyState`.
+
+#### Fixed
+
+- A real, pre-existing bug found while wiring notifications: `timerStore`'s foreground
+  tick loop only bumped a render counter and never called `reconcile()` — that only ran on
+  an AppState background→foreground transition or cold-start `hydrate()`. A session left
+  running with the app foregrounded for its *entire* duration (the common case) never left
+  `'running'` on its own: the clock hit 00:00 and froze there, with Pause/Cancel/Finish
+  still showing, until the app happened to be backgrounded and re-foregrounded. Fixed by
+  checking `isPhaseComplete()` in the tick loop and reconciling right there when true.
+- `lib/notifications/scheduler.ts` was logging `console.error` on every single timer
+  action on platforms without scheduled-notification support (web has none — only
+  permissions) — `ERR_UNAVAILABLE` specifically means "not implemented here," a permanent,
+  expected condition, not a bug. Found while browser-smoke-testing the Settings screen:
+  starting a Pomodoro flooded the console every time AppState fired. Now logged only once
+  as expected instead of as an error; genuinely unexpected failures still surface normally.
+
 ### Phase 6 — Today Tasks, Session History & Statistics
 
 #### Added
