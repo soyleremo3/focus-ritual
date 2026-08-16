@@ -6,6 +6,19 @@ import type { NotificationPlan } from '@/domain/notifications/notificationPlan';
 const PHASE_END_NOTIFICATION_ID = 'focus-ritual-phase-end';
 const ANDROID_CHANNEL_ID = 'timer';
 
+/**
+ * ERR_UNAVAILABLE means "not implemented on this platform" — expo-notifications has no
+ * web implementation for scheduled/cancelled notifications (only permissions, which use
+ * the browser's own Notification API). That's an expected, permanent condition on web, not
+ * a bug worth an error-level log on every single timer action — so it's swallowed quietly
+ * here while any other, genuinely unexpected failure still surfaces normally.
+ */
+function logUnlessUnavailable(context: string, error: unknown): void {
+  const code = typeof error === 'object' && error !== null && 'code' in error ? (error as { code?: unknown }).code : undefined;
+  if (code === 'ERR_UNAVAILABLE') return;
+  console.error(`[notifications] ${context}`, error);
+}
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowBanner: true,
@@ -45,7 +58,7 @@ export async function ensureNotificationPermission(): Promise<boolean> {
     const requested = await Notifications.requestPermissionsAsync();
     return requested.granted;
   } catch (error) {
-    console.error('[notifications] failed to check/request permission', error);
+    logUnlessUnavailable('failed to check/request permission', error);
     return false;
   }
 }
@@ -54,7 +67,7 @@ export async function cancelPhaseEndNotification(): Promise<void> {
   try {
     await Notifications.cancelScheduledNotificationAsync(PHASE_END_NOTIFICATION_ID);
   } catch (error) {
-    console.error('[notifications] failed to cancel', error);
+    logUnlessUnavailable('failed to cancel', error);
   }
 }
 
@@ -78,6 +91,6 @@ export async function schedulePhaseEndNotification(plan: NotificationPlan): Prom
       },
     });
   } catch (error) {
-    console.error('[notifications] failed to schedule', error);
+    logUnlessUnavailable('failed to schedule', error);
   }
 }
