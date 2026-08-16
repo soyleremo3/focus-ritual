@@ -26,17 +26,26 @@ interface SettingsStoreState {
   update: (patch: Partial<AppSettings>) => Promise<void>;
 }
 
+/**
+ * Guards against two overlapping update() calls resolving out of order — without it, two
+ * rapid toggles (e.g. notifications off, then haptics off) could have the first call's
+ * slower DB read-back land *after* the second call's, overwriting the second toggle's
+ * already-applied state with a stale snapshot and visibly flipping it back.
+ */
+let updateSequence = 0;
+
 export const useSettingsStore = create<SettingsStoreState>()((set, get) => ({
   settings: DEFAULT_SETTINGS,
   loaded: false,
 
   update: async (patch) => {
+    const mySequence = ++updateSequence;
     // Optimistic — Settings toggles should feel instant, not wait on a DB round-trip.
     set({ settings: { ...get().settings, ...patch } });
     try {
       const db = await getDatabase();
       const next = await settingsRepo.updateSettings(db, patch);
-      set({ settings: next });
+      if (mySequence === updateSequence) set({ settings: next });
     } catch (error) {
       console.error('[settingsStore] failed to persist settings', error);
     }

@@ -36,7 +36,15 @@ async function initDatabase(): Promise<Database> {
  */
 export function getDatabase(): Promise<Database> {
   if (!databasePromise) {
-    databasePromise = initDatabase();
+    databasePromise = initDatabase().catch((error: unknown) => {
+      // Don't memoize a failure forever — without this, one transient boot error (a
+      // momentary native-bridge hiccup, not necessarily a real corruption) would
+      // permanently brick every DB-dependent feature for the rest of the process
+      // lifetime, with every caller just logging and no way to recover short of a
+      // reinstall. Clearing the memo lets the next getDatabase() call retry from scratch.
+      databasePromise = null;
+      throw error;
+    });
   }
   return databasePromise;
 }

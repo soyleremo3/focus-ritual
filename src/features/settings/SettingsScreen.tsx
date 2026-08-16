@@ -10,6 +10,7 @@ import type { AppSettings } from '@/db/repositories/settingsRepo';
 import { NumberField } from '@/features/rituals/NumberField';
 import * as haptics from '@/lib/haptics';
 import { useSettingsStore } from '@/store/settingsStore';
+import { resyncCurrentNotification } from '@/store/timerStore';
 import { useTheme } from '@/theme/ThemeProvider';
 
 const THEME_OPTIONS: { value: AppSettings['themeMode']; label: string }[] = [
@@ -155,7 +156,9 @@ export function SettingsScreen() {
             label="Phase completion alerts"
             description="Notify when a focus or break phase ends — permission is asked only when needed"
             value={settings.notificationsEnabled}
-            onValueChange={(next) => void update({ notificationsEnabled: next })}
+            onValueChange={(next) => {
+              void update({ notificationsEnabled: next }).then(resyncCurrentNotification);
+            }}
           />
         </Section>
 

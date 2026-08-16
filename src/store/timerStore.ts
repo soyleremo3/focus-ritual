@@ -38,20 +38,33 @@ function currentAutoStartSettings(): AutoStartSettings {
 }
 
 /**
+ * Guards the async schedule path against a slower, older sync call resolving after a
+ * faster, newer one — without it, e.g. start() (which awaits a permission check before
+ * scheduling) racing an immediately-following cancel() (which cancels synchronously) could
+ * have start()'s schedule land *after* cancel()'s cancel, leaving a stale notification
+ * armed for a session that's already been cancelled or paused.
+ */
+let notificationSyncSequence = 0;
+
+/**
  * Reschedules (or cancels) the session's phase-end notification against a single fixed
  * identifier — see scheduler.ts. Called after every state-changing action and every
  * reconcile() call site (AppState foreground, cold-start hydrate, and the live tick-loop
  * fix above), so pause/resume/reset/finish/cancel/app-restart/recovered-session all stay
  * correct without any of them needing to track a notification ID themselves.
  */
-function syncNotification(session: TimerSession | null, now: number): void {
+export function syncNotification(session: TimerSession | null, now: number): void {
+  const mySequence = ++notificationSyncSequence;
   const plan = session ? planPhaseEndNotification(session, now) : null;
   if (!plan || !useSettingsStore.getState().settings.notificationsEnabled) {
     void cancelPhaseEndNotification();
     return;
   }
   ensureNotificationPermission()
-    .then((granted) => (granted ? schedulePhaseEndNotification(plan) : cancelPhaseEndNotification()))
+    .then((granted) => {
+      if (mySequence !== notificationSyncSequence) return; // superseded by a newer sync
+      return granted ? schedulePhaseEndNotification(plan) : cancelPhaseEndNotification();
+    })
     .catch((error: unknown) => {
       console.error('[timerStore] failed to sync notification', error);
     });
@@ -287,6 +300,18 @@ async function hydrate(): Promise<void> {
 }
 
 void hydrate();
+
+/**
+ * Re-syncs the current session's notification against whatever settingsStore holds right
+ * now — call this after toggling notificationsEnabled. Without it, disabling notifications
+ * while a session is running left its already-scheduled phase-end notification armed:
+ * syncNotification() only ever runs from a timer *action*, and flipping a Settings toggle
+ * isn't one, so nothing would otherwise cancel it until the next unrelated timer action.
+ */
+export function resyncCurrentNotification(): void {
+  const { session } = useTimerStore.getState();
+  syncNotification(session, Date.now());
+}
 
 /** Re-renders on every tick so the returned value stays live while running. */
 export function useElapsedMs(): number | null {
