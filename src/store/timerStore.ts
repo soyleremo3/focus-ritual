@@ -12,13 +12,22 @@ import {
   continueFocus as continueFocusEngine,
   createSession,
   finish as finishEngine,
+  isPhaseComplete,
   pause as pauseEngine,
   reconcile,
   resume as resumeEngine,
+  type AutoStartSettings,
 } from '@/domain/timer/timerEngine';
 import type { TimerMode, TimerSession } from '@/domain/timer/types';
+import * as haptics from '@/lib/haptics';
+import { useSettingsStore } from '@/store/settingsStore';
 
 const TICK_INTERVAL_MS = 300;
+
+function currentAutoStartSettings(): AutoStartSettings {
+  const { autoStartBreaks, autoStartNextFocus } = useSettingsStore.getState().settings;
+  return { autoStartBreaks, autoStartNextFocus };
+}
 
 interface StartOptions {
   ritualId?: string | null;
@@ -50,9 +59,33 @@ function stopInterval() {
   }
 }
 
+/**
+ * Most ticks just bump the render counter — computeElapsedMs/computeRemainingMs derive the
+ * live values, so nothing else is needed. But if the phase boundary was crossed since the
+ * last tick, reconcile() must run right here too: it previously only ran on an AppState
+ * background->foreground transition or cold-start hydrate(), so a session that stayed
+ * foregrounded for its *entire* duration (the common case — someone watching the ring count
+ * down) never left 'running' on its own. The clock would hit 00:00 and freeze there, with
+ * Pause/Cancel/Finish still showing, until the user happened to background/foreground the
+ * app. success() fires only from this live path — reconcile() running later because of a
+ * background/foreground cycle or a cold start means the user wasn't looking, so a haptic
+ * then would be a non sequitur rather than useful feedback.
+ */
 function startInterval() {
   if (intervalId != null) return;
   intervalId = setInterval(() => {
+    const { session } = useTimerStore.getState();
+    if (session && session.status === 'running') {
+      const now = Date.now();
+      if (isPhaseComplete(session, now)) {
+        const reconciled = reconcile(session, now, currentAutoStartSettings());
+        useTimerStore.setState((state) => ({ session: reconciled, tick: state.tick + 1 }));
+        if (reconciled.status !== 'running') stopInterval();
+        persistSession(reconciled, now);
+        haptics.success();
+        return;
+      }
+    }
     useTimerStore.setState((state) => ({ tick: state.tick + 1 }));
   }, TICK_INTERVAL_MS);
 }
@@ -167,7 +200,7 @@ AppState.addEventListener('change', (next: AppStateStatus) => {
     const { session } = useTimerStore.getState();
     if (session && session.status === 'running') {
       const now = Date.now();
-      const reconciled = reconcile(session, now);
+      const reconciled = reconcile(session, now, currentAutoStartSettings());
       useTimerStore.setState({ session: reconciled });
       if (reconciled.status === 'running') startInterval();
       persistSession(reconciled, now);
@@ -188,7 +221,7 @@ async function hydrate(): Promise<void> {
     if (!active) return;
 
     const now = Date.now();
-    const reconciled = reconcile(active, now);
+    const reconciled = reconcile(active, now, currentAutoStartSettings());
     useTimerStore.setState({ session: reconciled });
     if (reconciled.status === 'running') startInterval();
     await upsertSession(db, reconciled, now);
