@@ -2,6 +2,7 @@ import * as SQLite from 'expo-sqlite';
 
 import { migrate } from './schema';
 import { seedBundledData } from './seed';
+import { seedExampleRitualsIfEmpty } from './seedExampleRituals';
 import type { Database } from './types';
 
 const DATABASE_NAME = 'focusritual.db';
@@ -24,6 +25,7 @@ async function initDatabase(): Promise<Database> {
   await db.execAsync('PRAGMA foreign_keys = ON');
   await migrate(db);
   await seedBundledData(db);
+  await seedExampleRitualsIfEmpty(db);
   return db;
 }
 
