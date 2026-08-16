@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,9 +13,11 @@ import { MODE_DEFAULTS, type TimerMode } from '@/domain/timer/types';
 import * as haptics from '@/lib/haptics';
 import { useRitualStore } from '@/store/ritualStore';
 import { useSoundStore } from '@/store/soundStore';
+import { useSpaceStore } from '@/store/spaceStore';
 import { useElapsedMs, useRemainingMs, useTimerStore } from '@/store/timerStore';
-import { defaultSceneId, sceneList, type SceneId } from '@/theme/scenePalettes';
-import { useScenePalette, useTheme } from '@/theme/ThemeProvider';
+import { defaultSceneId, scenePalettes } from '@/theme/scenePalettes';
+import { resolveSpacePalette } from '@/theme/spacePalette';
+import { useTheme } from '@/theme/ThemeProvider';
 
 import { formatClock } from './formatClock';
 import { ModePicker } from './ModePicker';
@@ -25,6 +27,7 @@ import { TimerControls } from './TimerControls';
 import { TimerRing } from './TimerRing';
 
 const ACTIVE_STATUSES = new Set(['running', 'paused', 'awaiting-start']);
+const FALLBACK_SPACE_NAME = scenePalettes[defaultSceneId].name;
 
 /** Cache-first (ritualStore), falling back to a direct DB read if the store hasn't loaded yet. */
 async function resolveRitual(id: string): Promise<Ritual | null> {
@@ -39,11 +42,19 @@ export function FocusScreen() {
   const { width } = useWindowDimensions();
   const ringSize = width > 0 ? Math.min(300, width * 0.72) : 260;
 
-  const [sceneId, setSceneId] = useState(defaultSceneId);
   const [mode, setMode] = useState<TimerMode>('pomodoro');
   const [mixerVisible, setMixerVisible] = useState(false);
 
-  const palette = useScenePalette(sceneId);
+  // The space a ritual-tied session forces (start-from-ritual, or cold-start recovery of
+  // one) takes priority over the user's standalone gallery pick while that session lasts.
+  const [ritualSpaceOverride, setRitualSpaceOverride] = useState<string | null>(null);
+  const spaces = useSpaceStore((s) => s.spaces);
+  const standaloneActiveSpaceId = useSpaceStore((s) => s.activeSpaceId);
+  const displaySpaceId = ritualSpaceOverride ?? standaloneActiveSpaceId;
+  const activeSpace = spaces.find((s) => s.id === displaySpaceId) ?? null;
+  const palette = activeSpace ? resolveSpacePalette(activeSpace) : scenePalettes[defaultSceneId];
+  const spaceName = activeSpace?.name ?? FALLBACK_SPACE_NAME;
+  const spaceImageUri = activeSpace?.kind === 'custom' ? activeSpace.imageUri : null;
 
   const session = useTimerStore((s) => s.session);
   const start = useTimerStore((s) => s.start);
@@ -93,7 +104,7 @@ export function FocusScreen() {
   // the effect above creates a session, and when a running/paused session recovers from a
   // cold start (timerStore's hydrate() sets session.ritualId directly, bypassing the
   // param-driven effect above entirely). Without this, a killed-and-relaunched app would
-  // recover the correct elapsed time but silently drop back to the default scene/sound
+  // recover the correct elapsed time but silently drop back to the default space/sound
   // mix instead of the ritual's.
   const sessionRitualId = session?.ritualId ?? null;
   const sessionStatus = session?.status ?? null;
@@ -107,7 +118,7 @@ export function FocusScreen() {
     resolveRitual(sessionRitualId)
       .then((ritual) => {
         if (!ritual || cancelled) return;
-        if (ritual.spaceId) setSceneId(ritual.spaceId as SceneId);
+        if (ritual.spaceId) setRitualSpaceOverride(ritual.spaceId);
         soundSetMix(ritualToActiveMix(ritual));
         if (sessionStatus === 'running') soundPlay();
       })
@@ -119,6 +130,17 @@ export function FocusScreen() {
       cancelled = true;
     };
   }, [sessionRitualId, sessionStatus, soundSetMix, soundPlay]);
+
+  // A plain "Start" (no ritual) creates a new session with no ritualId — release any
+  // leftover ritual space override so the screen falls back to the user's own gallery
+  // pick instead of lingering on a previous ritual's space.
+  const sessionId = session?.id ?? null;
+  useEffect(() => {
+    if (sessionId && !sessionRitualId) {
+      setRitualSpaceOverride(null);
+      appliedRitualIdRef.current = null;
+    }
+  }, [sessionId, sessionRitualId]);
 
   const handleStart = () => {
     haptics.tap();
@@ -150,11 +172,12 @@ export function FocusScreen() {
     cancel();
     soundPause();
   };
-  const handleCycleScene = () => {
-    haptics.select();
-    const ids = sceneList.map((s) => s.id);
-    const idx = ids.indexOf(sceneId);
-    setSceneId(ids[(idx + 1) % ids.length] ?? defaultSceneId);
+  const handleOpenSpaces = () => {
+    haptics.tap();
+    // expo-router's typed routes don't collapse a plain (non-group) folder's index.tsx
+    // to a bare "/spaces" href the way it does for (tabs) routes — the fully-qualified
+    // path is the one the generated types actually expose.
+    router.push('/spaces/index');
   };
 
   const currentPhaseMinutes = session
@@ -172,7 +195,7 @@ export function FocusScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <SceneBackdrop palette={palette} />
+      <SceneBackdrop palette={palette} imageUri={spaceImageUri} />
       <SafeAreaView style={{ flex: 1 }}>
         <View
           style={{
@@ -183,9 +206,9 @@ export function FocusScreen() {
             paddingTop: theme.spacing.sm,
           }}
         >
-          <Pressable onPress={handleCycleScene} hitSlop={12}>
+          <Pressable onPress={handleOpenSpaces} hitSlop={12}>
             <Text variant="label" color={palette.textMuted}>
-              {palette.name}
+              {spaceName}
             </Text>
           </Pressable>
           <IconButton
