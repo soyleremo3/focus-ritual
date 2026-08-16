@@ -29,10 +29,10 @@ describe('spacesRepo', () => {
 
     expect(space.kind).toBe('custom');
     expect(space.name).toBe('My Desk');
-    expect(space.image_uri).toBe('file:///spaces/a.jpg');
-    expect(space.palette_mood).toBe('warm');
-    expect(space.is_archived).toBe(0);
-    expect(space.is_favorite).toBe(0);
+    expect(space.imageUri).toBe('file:///spaces/a.jpg');
+    expect(space.paletteMood).toBe('warm');
+    expect(space.isArchived).toBe(false);
+    expect(space.isFavorite).toBe(false);
   });
 
   test('listSpaces includes bundled scenes plus active custom spaces, ordered by created_at', async () => {
@@ -52,8 +52,8 @@ describe('spacesRepo', () => {
 
     const updated = await getSpaceById(db, space.id);
     expect(updated?.name).toBe('Rainy Desk');
-    expect(updated?.image_uri).toBe('file:///b.jpg');
-    expect(updated?.palette_mood).toBe('cool');
+    expect(updated?.imageUri).toBe('file:///b.jpg');
+    expect(updated?.paletteMood).toBe('cool');
   });
 
   test('updateCustomSpace refuses to modify a bundled space', async () => {
@@ -77,8 +77,8 @@ describe('spacesRepo', () => {
 
     const stillThere = await getSpaceById(db, space.id);
     expect(stillThere).not.toBeNull();
-    expect(stillThere?.is_archived).toBe(1);
-    expect(stillThere?.image_uri).toBe('file:///a.jpg');
+    expect(stillThere?.isArchived).toBe(true);
+    expect(stillThere?.imageUri).toBe('file:///a.jpg');
   });
 
   test('a ritual referencing a since-deleted custom space still resolves it (fallback safety)', async () => {
@@ -104,8 +104,8 @@ describe('spacesRepo', () => {
     // The ritual's spaceId still resolves to the original photo/mood — nothing is lost.
     const resolved = await getSpaceById(db, ritual.spaceId ?? '');
     expect(resolved).not.toBeNull();
-    expect(resolved?.image_uri).toBe('file:///a.jpg');
-    expect(resolved?.palette_mood).toBe('warm');
+    expect(resolved?.imageUri).toBe('file:///a.jpg');
+    expect(resolved?.paletteMood).toBe('warm');
   });
 
   test('setSpaceFavorite and markSpaceUsed update their respective columns', async () => {
@@ -116,7 +116,7 @@ describe('spacesRepo', () => {
     await markSpaceUsed(db, space.id, T0 + 5000);
 
     const row = await getSpaceById(db, space.id);
-    expect(row?.is_favorite).toBe(1);
-    expect(row?.last_used_at).toBe(T0 + 5000);
+    expect(row?.isFavorite).toBe(true);
+    expect(row?.lastUsedAt).toBe(T0 + 5000);
   });
 });

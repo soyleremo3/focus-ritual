@@ -34,7 +34,7 @@ describe('seedBundledData', () => {
     expect(spaces).toHaveLength(3);
     expect(sounds).toHaveLength(3);
     // Re-running with a different `now` must not touch the original created_at.
-    expect(spaces.every((s) => s.created_at === T0)).toBe(true);
+    expect(spaces.every((s) => s.createdAt === T0)).toBe(true);
   });
 
   it('does not clobber a row already modified, even though the app never lets a user edit a bundled space', async () => {
@@ -52,6 +52,6 @@ describe('seedBundledData', () => {
     // drops out of it. Read it back directly to confirm re-seeding didn't touch it.
     const amberStudy = await getSpaceById(db, 'amber-study');
     expect(amberStudy?.name).toBe('My Renamed Study');
-    expect(amberStudy?.is_archived).toBe(1);
+    expect(amberStudy?.isArchived).toBe(true);
   });
 });

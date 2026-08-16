@@ -1,8 +1,9 @@
 import { generateId } from '@/domain/id';
+import type { MoodId, Space } from '@/domain/space/types';
 
 import type { Database } from '../types';
 
-export interface SpaceRow {
+interface SpaceRow {
   id: string;
   name: string;
   kind: 'bundled' | 'custom';
@@ -25,13 +26,28 @@ export interface BundledSpaceInput {
 export interface CustomSpaceDraft {
   name: string;
   imageUri: string;
-  paletteMood: string;
+  paletteMood: MoodId;
 }
 
 export interface CustomSpaceUpdate {
   name?: string;
   imageUri?: string;
-  paletteMood?: string;
+  paletteMood?: MoodId;
+}
+
+function rowToSpace(row: SpaceRow): Space {
+  return {
+    id: row.id,
+    name: row.name,
+    kind: row.kind,
+    bundledSceneId: row.bundled_scene_id,
+    imageUri: row.image_uri,
+    paletteMood: row.palette_mood as MoodId | null,
+    isFavorite: row.is_favorite === 1,
+    lastUsedAt: row.last_used_at,
+    createdAt: row.created_at,
+    isArchived: row.is_archived === 1,
+  };
 }
 
 /** INSERT OR IGNORE keyed by the scene's own stable id — safe to call every app start. */
@@ -44,33 +60,39 @@ export async function insertBundledSpaceIfMissing(db: Database, input: BundledSp
 }
 
 /** Active (non-archived) spaces only — what the gallery and ritual editor show. */
-export async function listSpaces(db: Database): Promise<SpaceRow[]> {
-  return db.getAllAsync<SpaceRow>('SELECT * FROM spaces WHERE is_archived = 0 ORDER BY created_at', []);
+export async function listSpaces(db: Database): Promise<Space[]> {
+  const rows = await db.getAllAsync<SpaceRow>('SELECT * FROM spaces WHERE is_archived = 0 ORDER BY created_at', []);
+  return rows.map(rowToSpace);
 }
 
 /**
  * Returns a space regardless of archived status — a ritual referencing a since-deleted
  * custom space must still be able to resolve its backdrop/palette.
  */
-export async function getSpaceById(db: Database, id: string): Promise<SpaceRow | null> {
-  return db.getFirstAsync<SpaceRow>('SELECT * FROM spaces WHERE id = ?', [id]);
+export async function getSpaceById(db: Database, id: string): Promise<Space | null> {
+  const row = await db.getFirstAsync<SpaceRow>('SELECT * FROM spaces WHERE id = ?', [id]);
+  return row ? rowToSpace(row) : null;
 }
 
-export async function createCustomSpace(db: Database, draft: CustomSpaceDraft, now: number = Date.now()): Promise<SpaceRow> {
+export async function createCustomSpace(db: Database, draft: CustomSpaceDraft, now: number = Date.now()): Promise<Space> {
   const id = generateId();
   await db.runAsync(
     `INSERT INTO spaces (id, name, kind, image_uri, palette_mood, created_at, is_archived)
      VALUES (?, ?, 'custom', ?, ?, ?, 0)`,
     [id, draft.name, draft.imageUri, draft.paletteMood, now]
   );
-  const row = await getSpaceById(db, id);
-  if (!row) throw new Error('[spacesRepo] failed to read back created space');
-  return row;
+  const created = await getSpaceById(db, id);
+  if (!created) throw new Error('[spacesRepo] failed to read back created space');
+  return created;
+}
+
+async function getRawSpaceById(db: Database, id: string): Promise<SpaceRow | null> {
+  return db.getFirstAsync<SpaceRow>('SELECT * FROM spaces WHERE id = ?', [id]);
 }
 
 /** Rename/re-tag/replace-photo for a custom space. Bundled spaces are immutable — throws if kind !== 'custom'. */
 export async function updateCustomSpace(db: Database, id: string, patch: CustomSpaceUpdate): Promise<void> {
-  const row = await getSpaceById(db, id);
+  const row = await getRawSpaceById(db, id);
   if (!row || row.kind !== 'custom') {
     throw new Error(`[spacesRepo] space ${id} is not an editable custom space`);
   }
@@ -86,7 +108,7 @@ export async function updateCustomSpace(db: Database, id: string, patch: CustomS
  * disappears from the gallery and future space pickers.
  */
 export async function archiveCustomSpace(db: Database, id: string): Promise<void> {
-  const row = await getSpaceById(db, id);
+  const row = await getRawSpaceById(db, id);
   if (!row || row.kind !== 'custom') {
     throw new Error(`[spacesRepo] space ${id} is not a deletable custom space`);
   }
