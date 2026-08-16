@@ -30,6 +30,8 @@ import { useSettingsStore } from '@/store/settingsStore';
 
 const TICK_INTERVAL_MS = 300;
 
+const ACTIVE_STATUSES = new Set<TimerSession['status']>(['running', 'paused', 'awaiting-start']);
+
 function currentAutoStartSettings(): AutoStartSettings {
   const { autoStartBreaks, autoStartNextFocus } = useSettingsStore.getState().settings;
   return { autoStartBreaks, autoStartNextFocus };
@@ -136,6 +138,17 @@ export const useTimerStore = create<TimerStoreState>()((set, get) => ({
 
   start: (mode, options) => {
     const now = Date.now();
+    const { session: existing } = get();
+    if (existing && ACTIVE_STATUSES.has(existing.status)) {
+      // Starting a new session implicitly ends whatever was active — without this, the
+      // previous session is simply dropped from the store while its DB row stays
+      // 'running' forever: a zombie invisible to History (only completed/cancelled are
+      // listed) that getActiveSession will never surface again once the new session
+      // starts writing more recent updated_at timestamps. Reachable via normal
+      // navigation — e.g. starting a ritual from the Rituals tab while another session
+      // is already running.
+      persistSession(cancelEngine(existing, now), now);
+    }
     const session = createSession({
       id: generateId(),
       mode,
@@ -254,6 +267,13 @@ async function hydrate(): Promise<void> {
     const db = await getDatabase();
     const active = await getActiveSession(db);
     if (!active) return;
+
+    // A slow first boot can let the user tap Start (or recover a different session via
+    // some other path) before this resolves — without this guard, hydrate() would
+    // unconditionally clobber that already-in-progress session with the stale row read
+    // above, and the user's new session becomes an invisible zombie row in exactly the
+    // same way start()'s own guard (above) prevents.
+    if (useTimerStore.getState().session) return;
 
     const now = Date.now();
     const reconciled = reconcile(active, now, currentAutoStartSettings());
