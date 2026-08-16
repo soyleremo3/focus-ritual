@@ -1,14 +1,20 @@
-import { useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { IconButton } from '@/components/IconButton';
 import { Text } from '@/components/Text';
+import { getDatabase } from '@/db/client';
+import { getRitualById } from '@/db/repositories/ritualsRepo';
+import { ritualToActiveMix, ritualToSessionStart } from '@/domain/ritual/ritual';
+import type { Ritual } from '@/domain/ritual/types';
 import { MODE_DEFAULTS, type TimerMode } from '@/domain/timer/types';
 import * as haptics from '@/lib/haptics';
+import { useRitualStore } from '@/store/ritualStore';
 import { useSoundStore } from '@/store/soundStore';
 import { useElapsedMs, useRemainingMs, useTimerStore } from '@/store/timerStore';
-import { defaultSceneId, sceneList } from '@/theme/scenePalettes';
+import { defaultSceneId, sceneList, type SceneId } from '@/theme/scenePalettes';
 import { useScenePalette, useTheme } from '@/theme/ThemeProvider';
 
 import { formatClock } from './formatClock';
@@ -43,8 +49,50 @@ export function FocusScreen() {
 
   const soundPlay = useSoundStore((s) => s.play);
   const soundPause = useSoundStore((s) => s.pause);
+  const soundSetMix = useSoundStore((s) => s.setMix);
 
   const isSessionActive = session != null && ACTIVE_STATUSES.has(session.status);
+
+  // Started from a ritual (RitualCard's "Start" button navigates here with this param).
+  // Loads the ritual's saved space + sound mix and starts a session with its settings.
+  const { startRitualId } = useLocalSearchParams<{ startRitualId?: string }>();
+  const processedRitualIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!startRitualId || processedRitualIdRef.current === startRitualId) return;
+    processedRitualIdRef.current = startRitualId;
+
+    let cancelled = false;
+
+    function begin(ritual: Ritual) {
+      if (cancelled) return;
+      haptics.tap();
+      if (ritual.spaceId) setSceneId(ritual.spaceId as SceneId);
+      soundSetMix(ritualToActiveMix(ritual));
+      const sessionStart = ritualToSessionStart(ritual);
+      start(sessionStart.mode, sessionStart);
+      soundPlay();
+      void useRitualStore.getState().markUsed(ritual.id);
+    }
+
+    const cached = useRitualStore.getState().rituals.find((r) => r.id === startRitualId);
+    if (cached) {
+      begin(cached);
+    } else {
+      getDatabase()
+        .then((db) => getRitualById(db, startRitualId))
+        .then((ritual) => {
+          if (ritual) begin(ritual);
+        })
+        .catch((error: unknown) => {
+          console.error('[FocusScreen] failed to start from ritual', error);
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [startRitualId, start, soundPlay, soundSetMix]);
 
   const handleStart = () => {
     haptics.tap();
