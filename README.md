@@ -27,7 +27,8 @@ no API keys, no analytics, no paid services.
 - Strict TypeScript (`noUncheckedIndexedAccess` on), path alias `@/* → src/*`
 - Expo Router (file-based navigation, routes under `src/app/`)
 - Zustand for state
-- `expo-sqlite` for local persistence *(schema designed now, implemented Phase 2 — see below)*
+- `expo-sqlite` for local persistence (versioned migrations, a repository layer — see
+  [Persistence](#persistence) below)
 - `expo-audio` for the ambient sound mixer, with real background/lock-screen playback
 - `expo-notifications`, `expo-image-picker`, `expo-haptics`, `expo-file-system`,
   `expo-linear-gradient` *(scrims over Focus Space backdrops)*
@@ -63,11 +64,16 @@ FocusRitual/
     app/                        expo-router routes (thin; import from features/)
       _layout.tsx                providers, splash hold, audio mode setup
       (tabs)/                    Focus | Rituals | Tasks | History | Settings
+    db/                         expo-sqlite: migrations, repositories (see below)
+      client.ts                  getDatabase() — lazily-memoized singleton opener
+      schema.ts                  versioned migrations, PRAGMA user_version-driven
+      seed.ts                    idempotent bundled-data seed
+      repositories/               sessionsRepo, spacesRepo, soundsRepo
     domain/                     pure, framework-free, unit-tested business logic
       timer/                     timestamp-based timer engine (see below)
       palette/                   WCAG contrast helper behind scene palette isDark
     store/                      Zustand — one small store per concern, not one mega-store
-      timerStore.ts              owns the AppState subscription + refresh interval
+      timerStore.ts              owns the AppState subscription + refresh interval + persistence
       soundStore.ts              serializable UI state only, delegates to soundEngine
     theme/                      design system — tokens, motion, scene palettes, ThemeProvider
     features/focus/             the Focus screen and its subcomponents
@@ -77,7 +83,7 @@ FocusRitual/
       haptics.ts
 ```
 
-Not created yet — `db/`, `ritualStore`/`spacesStore`/`tasksStore`/`settingsStore`,
+Not created yet — `ritualStore`/`spacesStore`/`tasksStore`/`settingsStore`,
 `lib/notifications/scheduler.ts`, `lib/imagePicker.ts`, and the
 `rituals/spaces/sounds/tasks/history/settings` feature directories. Each arrives with its
 own phase below rather than being pre-stubbed.
@@ -102,8 +108,48 @@ needs a human decision (`status: 'awaiting-start'`) rather than guessing intent:
   flow?"** decision (keep going, extending the target, or take a break) instead of
   assuming a break was wanted.
 
-Phase 1 keeps sessions in-memory only. Cold-start/app-kill session recovery is a Phase 2
-concern, once `sessionsRepo` exists to persist an in-flight session.
+`reconcile()` is idempotent: calling it again on a session that already halted
+(`awaiting-start`, `paused`, `completed`, or `cancelled`) is a guaranteed no-op — only a
+`running` session accrues wall-clock time to reconcile. This matters beyond
+correctness-for-its-own-sake: cold-start recovery (below) reconciles a session that may
+already have halted while the app wasn't running, and does so through the exact same
+function backgrounding uses.
+
+## Persistence
+
+`src/db/` wraps `expo-sqlite` behind a small `Database` interface
+(`src/db/types.ts`) that every repository takes as an explicit parameter rather than
+importing a module-level singleton — this is what lets tests substitute a
+[`node:sqlite`](https://nodejs.org/api/sqlite.html)-backed implementation
+(`src/db/__tests__/testDatabase.ts`) and exercise migrations and repositories against
+real SQL, with no native module and no new dependency.
+
+`src/db/schema.ts` is a versioned, additive migration list (`PRAGMA
+user_version`-driven, one transaction per migration) rather than a single-shot schema —
+each future phase adds a migration instead of editing a shipped one. Phase 2's migration
+creates all seven planned tables: `spaces`, `sounds`, `rituals`, `ritual_sound_layers`,
+`tasks`, `sessions`, and `settings`. Timestamps are stored as epoch-ms integers, matching
+the domain layer directly — no ISO string conversion at the boundary.
+
+`src/db/client.ts`'s `getDatabase()` lazily opens the database once, memoized for the
+app's lifetime: enables `PRAGMA foreign_keys`, runs pending migrations, then seeds
+bundled data. `src/db/seed.ts` inserts the 3 hand-authored scene palettes into `spaces`
+and the 3 bundled ambient loops into `sounds`, each `INSERT OR IGNORE`d by its own stable
+id — safe to run on every app start without duplicating rows or clobbering a row a later
+phase's UI has since modified.
+
+**Session recovery**: `timerStore` persists the current session via `sessionsRepo` on
+every action (fire-and-forget, so call sites stay synchronous) and on every AppState
+foreground reconciliation. At module load, `hydrate()` reads the most recently updated
+active session (`running` / `paused` / `awaiting-start`) and runs it through the same
+`reconcile()` used for backgrounding — a cold start is just an extreme case of "the app
+wasn't running for a while," so no separate recovery codepath was needed, only the
+already-correct primitive.
+
+Only `sessionsRepo` (persistence-critical) and the read/seed paths for `spacesRepo` /
+`soundsRepo` exist so far. `rituals`, `tasks`, and `settings` have tables but no
+repository yet — CRUD for those lands with their own phase (3, 6, 7) rather than being
+built ahead of the UI that needs it.
 
 ## Ambient sound mixer
 
@@ -132,24 +178,18 @@ app stays coherent while the Focus screen adapts per scene.
 
 ## Phase roadmap
 
-**Phase 1 — Architecture, design system, Focus screen prototype.** *(this phase)*
-Project scaffold, design tokens, `ThemeProvider`, shared UI primitives, the timer engine,
-a functional ambient sound mixer, and a production-quality Focus screen. No persistence,
-no Rituals/Tasks/History/Settings screens yet.
+**Phase 1 — Architecture, design system, Focus screen prototype.** ✅ Project scaffold,
+design tokens, `ThemeProvider`, shared UI primitives, the timer engine, a functional
+ambient sound mixer, and a production-quality Focus screen.
 
-**Phase 2 — Persistence foundation.** `src/db/client.ts` + `schema.ts` (versioned
-migrations, `PRAGMA user_version`-driven) + a `repositories/` layer, wiring `timerStore` to
-a `sessionsRepo` so in-flight sessions survive a cold start. Planned schema:
-
-- `spaces` — bundled or custom Focus Spaces (`kind`, `bundled_scene_id` or `image_uri` +
-  `palette_mood`)
-- `sounds` — reference table seeded from `soundLibrary`
-- `rituals` — timer mode + durations + `space_id` + favorite/last-used
-- `ritual_sound_layers` — junction table (`ritual_id`, `sound_id`, `volume`, `position`)
-- `tasks` — Today tasks, optionally linked to a ritual
-- `sessions` — doubles as history **and** the in-flight record, so a cold start can
-  reconstruct a running/paused session
-- `settings` — single-row table (theme mode, haptics/notifications toggles, defaults)
+**Phase 2 — Persistence foundation.** ✅ `src/db/` — versioned migrations for all seven
+planned tables (`spaces`, `sounds`, `rituals`, `ritual_sound_layers`, `tasks`,
+`sessions`, `settings`), a repository layer (`sessionsRepo`, `spacesRepo`, `soundsRepo`),
+`timerStore` wired to `sessionsRepo` so a running/paused session survives an app
+restart, and an idempotent seed for the bundled scenes/sounds. See
+[Persistence](#persistence) above. Ritual/task/settings CRUD is intentionally not built
+yet — their tables exist, but the repository functions land with the phase whose UI
+needs them.
 
 **Phase 3 — Rituals.** CRUD/editor composing a timer mode + Focus Space + sound mix into a
 named preset; start-from-ritual on the Focus screen; favorites and last-used.
@@ -177,11 +217,13 @@ performance pass.
 
 ## Verification
 
-Before Phase 2 begins, all of the following must pass:
+Before Phase 3 begins, all of the following must pass:
 
 1. `npm run typecheck`, `npm run lint`, `npx expo-doctor` — all clean.
-2. `npm test` — passes, including `domain/timer/timerEngine` and
-   `domain/palette/paletteContrast`.
+2. `npm test` — passes, including `domain/timer/timerEngine`,
+   `domain/palette/paletteContrast`, and every `db/__tests__` suite (migrations,
+   `sessionsRepo`, seed idempotency — run against a real `node:sqlite`-backed database,
+   not a hand-rolled mock).
 3. Focus tab renders correctly in the Expo preview: hero timer, scene backdrop, all 6
    modes switch the planned duration correctly; the other 4 tabs render their empty state
    without crashing.
@@ -189,6 +231,8 @@ Before Phase 2 begins, all of the following must pass:
    can't reproduce the native background behavior being tested):
    - Start a timer, lock/background the phone, foreground it — elapsed time reconciles
      correctly with no drift or double-counting.
+   - Start a timer, force-quit the app, relaunch it — the session recovers with elapsed
+     time reconciled correctly (Phase 2's cold-start recovery, not just backgrounding).
    - Toggle sound layers and drag their volume in the mixer sheet — real audio plays,
      mixes, and ramps.
    - With a sound mix playing, lock the screen and background the app for several
