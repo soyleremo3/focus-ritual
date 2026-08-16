@@ -59,6 +59,10 @@
     "preset": "jest-expo",
     "collectCoverageFrom": [
       "src/domain/**/*.{ts,tsx}"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "src/db/__tests__/testDatabase.ts"
     ]
   }
 }
