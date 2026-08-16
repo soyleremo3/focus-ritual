@@ -15,7 +15,9 @@ no API keys, no analytics, no paid services.
   color palette (not a fixed app-wide theme)
 - **Layered ambient sound mixer** with real background playback, independent per-layer
   volume, and sticky lock-screen media-session ownership
-- **Reusable Focus Ritual presets** *(Phase 3)*
+- **Reusable Focus Rituals** — compose a timer mode, Focus Space, and ambient sound mix
+  into a named preset; start a session directly from one (see
+  [Focus Rituals](#focus-rituals) below)
 - **Minimal Today tasks** *(Phase 6)*
 - **Session history and local statistics** *(Phase 6)*
 - **Local notifications and haptics** *(notifications: Phase 7; haptics: built now)*
@@ -64,29 +66,37 @@ FocusRitual/
     app/                        expo-router routes (thin; import from features/)
       _layout.tsx                providers, splash hold, audio mode setup
       (tabs)/                    Focus | Rituals | Tasks | History | Settings
+      rituals/new.tsx             modal — create
+      rituals/[id].tsx            modal — edit
     db/                         expo-sqlite: migrations, repositories (see below)
       client.ts                  getDatabase() — lazily-memoized singleton opener
       schema.ts                  versioned migrations, PRAGMA user_version-driven
-      seed.ts                    idempotent bundled-data seed
-      repositories/               sessionsRepo, spacesRepo, soundsRepo
+      seed.ts                    idempotent bundled spaces/sounds seed
+      seedExampleRituals.ts       one-time example-ritual seed (see Focus Rituals below)
+      repositories/               sessionsRepo, spacesRepo, soundsRepo, ritualsRepo
     domain/                     pure, framework-free, unit-tested business logic
       timer/                     timestamp-based timer engine (see below)
       palette/                   WCAG contrast helper behind scene palette isDark
+      ritual/                    Ritual types + sortRituals/duplicateRitualName/
+                                  ritualToSessionStart/ritualToActiveMix
     store/                      Zustand — one small store per concern, not one mega-store
       timerStore.ts              owns the AppState subscription + refresh interval + persistence
       soundStore.ts              serializable UI state only, delegates to soundEngine
+      ritualStore.ts              wraps ritualsRepo, keeps a sorted in-memory cache
     theme/                      design system — tokens, motion, scene palettes, ThemeProvider
-    features/focus/             the Focus screen and its subcomponents
+    features/
+      focus/                     the Focus screen and its subcomponents
+      rituals/                   RitualsListScreen, RitualCard, RitualEditorScreen
     components/                 shared, theme-aware UI primitives
     lib/                        imperative wrappers around native/expo modules
       audio/soundEngine.ts       AudioPlayer pool, sticky lock-screen ownership
       haptics.ts
 ```
 
-Not created yet — `ritualStore`/`spacesStore`/`tasksStore`/`settingsStore`,
-`lib/notifications/scheduler.ts`, `lib/imagePicker.ts`, and the
-`rituals/spaces/sounds/tasks/history/settings` feature directories. Each arrives with its
-own phase below rather than being pre-stubbed.
+Not created yet — `spacesStore`/`tasksStore`/`settingsStore`, `lib/notifications/
+scheduler.ts`, `lib/imagePicker.ts`, and the `spaces/sounds/tasks/history/settings`
+feature directories. Each arrives with its own phase below rather than being
+pre-stubbed.
 
 ## Timer engine
 
@@ -146,10 +156,37 @@ active session (`running` / `paused` / `awaiting-start`) and runs it through the
 wasn't running for a while," so no separate recovery codepath was needed, only the
 already-correct primitive.
 
-Only `sessionsRepo` (persistence-critical) and the read/seed paths for `spacesRepo` /
-`soundsRepo` exist so far. `rituals`, `tasks`, and `settings` have tables but no
-repository yet — CRUD for those lands with their own phase (3, 6, 7) rather than being
-built ahead of the UI that needs it.
+`tasks` and `settings` have tables but no repository yet — CRUD for those lands with
+their own phase (6, 7) rather than being built ahead of the UI that needs it.
+
+## Focus Rituals
+
+A Ritual (`src/domain/ritual/`) composes a timer mode + durations, a Focus Space, and an
+ambient sound mix into one named, reusable preset — `src/db/repositories/ritualsRepo.ts`
+is full local CRUD: `createRitual`/`updateRitual` (each transactionally replaces
+`ritual_sound_layers` rather than merging), `duplicateRitual` (collision-avoiding
+"(Copy)"/"(Copy 2)" naming via `domain/ritual`'s `duplicateRitualName`), `deleteRitual`
+(soft — archives, so a session that referenced it stays valid), `setRitualFavorite`, and
+`markRitualUsed`. `src/store/ritualStore.ts` wraps the repo and keeps an in-memory list
+sorted by `domain/ritual`'s `sortRituals` (favorites first, then most-recently-used, then
+newest) — every mutation re-fetches it.
+
+`src/db/seedExampleRituals.ts` seeds 3 examples (one per bundled scene) the first time the
+app ever runs, gated on `countAllRituals` (includes archived) rather than the active-only
+`countRituals` — otherwise deleting every example would resurrect them on the next start,
+since the active count would read back to 0. This is deliberately different from
+`seed.ts`'s permanent `INSERT OR IGNORE` reference rows: it's a one-time "give a new
+install something to start from," not a row the app always ensures exists.
+
+**Starting from a ritual**: `RitualCard`'s Start button navigates to the Focus tab with a
+`startRitualId` param. `FocusScreen` splits the resulting work into two effects instead of
+one: the first (keyed off the param) only creates the session via
+`ritualToSessionStart()`; the second (keyed off `session.ritualId` itself) applies the
+ritual's scene and sound mix via `ritualToActiveMix()` + `soundStore.setMix()`. Splitting
+them this way means the second effect *also* covers cold-start recovery — a
+killed-and-relaunched app recovering a ritual-linked session via `hydrate()` (see above)
+goes through the same session-ritualId effect and restores the scene/sound, not just the
+elapsed time.
 
 ## Ambient sound mixer
 
@@ -187,12 +224,15 @@ planned tables (`spaces`, `sounds`, `rituals`, `ritual_sound_layers`, `tasks`,
 `sessions`, `settings`), a repository layer (`sessionsRepo`, `spacesRepo`, `soundsRepo`),
 `timerStore` wired to `sessionsRepo` so a running/paused session survives an app
 restart, and an idempotent seed for the bundled scenes/sounds. See
-[Persistence](#persistence) above. Ritual/task/settings CRUD is intentionally not built
+[Persistence](#persistence) above. Task/settings CRUD is intentionally not built
 yet — their tables exist, but the repository functions land with the phase whose UI
 needs them.
 
-**Phase 3 — Rituals.** CRUD/editor composing a timer mode + Focus Space + sound mix into a
-named preset; start-from-ritual on the Focus screen; favorites and last-used.
+**Phase 3 — Rituals.** ✅ `ritualsRepo` (full CRUD, soft delete, favorite, last-used),
+`ritualStore`, `RitualsListScreen` + `RitualCard` + `RitualEditorScreen`, 3 example
+rituals seeded once on first run, and start-from-ritual on the Focus screen that
+correctly restores the ritual's scene/sound even across a cold-start recovery, not just
+an explicit start. See [Focus Rituals](#focus-rituals) above.
 
 **Phase 4 — Focus Spaces gallery & custom wallpapers.** Bundled scene gallery,
 `expo-image-picker` flow that copies the picked photo into `documentDirectory`
@@ -217,22 +257,27 @@ performance pass.
 
 ## Verification
 
-Before Phase 3 begins, all of the following must pass:
+Before Phase 4 begins, all of the following must pass:
 
 1. `npm run typecheck`, `npm run lint`, `npx expo-doctor` — all clean.
-2. `npm test` — passes, including `domain/timer/timerEngine`,
-   `domain/palette/paletteContrast`, and every `db/__tests__` suite (migrations,
-   `sessionsRepo`, seed idempotency — run against a real `node:sqlite`-backed database,
-   not a hand-rolled mock).
-3. Focus tab renders correctly in the Expo preview: hero timer, scene backdrop, all 6
-   modes switch the planned duration correctly; the other 4 tabs render their empty state
-   without crashing.
+2. `npm test` — passes, including `domain/timer/timerEngine`, `domain/palette/
+   paletteContrast`, `domain/ritual/ritual`, and every `db/__tests__` suite (migrations,
+   `sessionsRepo`, `ritualsRepo`, bundled-data seed idempotency, example-ritual seed
+   idempotency — run against a real `node:sqlite`-backed database, not a hand-rolled mock).
+3. In the Expo preview: Focus tab renders correctly (hero timer, scene backdrop, all 6
+   modes); Rituals tab shows the 3 seeded examples; create/edit/duplicate/delete/favorite
+   all work and the list re-sorts correctly; starting a ritual switches to the Focus tab
+   with its scene and sound mix loaded and the timer running with its saved
+   mode/durations; the other 3 tabs render their empty state without crashing.
 4. **Real-device smoke tests on a real Android device** (a dev client build if Expo Go
    can't reproduce the native background behavior being tested):
    - Start a timer, lock/background the phone, foreground it — elapsed time reconciles
      correctly with no drift or double-counting.
    - Start a timer, force-quit the app, relaunch it — the session recovers with elapsed
      time reconciled correctly (Phase 2's cold-start recovery, not just backgrounding).
+   - Start a session from a ritual, force-quit, relaunch — both the elapsed time *and*
+     the ritual's scene/sound mix recover (Phase 3's addition to cold-start recovery,
+     verified in the web preview; confirm on-device too).
    - Toggle sound layers and drag their volume in the mixer sheet — real audio plays,
      mixes, and ramps.
    - With a sound mix playing, lock the screen and background the app for several
