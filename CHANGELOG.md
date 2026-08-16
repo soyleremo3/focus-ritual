@@ -8,6 +8,46 @@ semantic versioning until a `1.0.0` release.
 
 ## [Unreleased]
 
+### Phase 4 — Focus Spaces & Custom Wallpapers
+
+#### Added
+
+- `domain/space`: `Space`/`MoodId` types and `sortSpaces` (same favorites/
+  most-recently-used/newest ordering as `sortRituals`).
+- `spacesRepo`: `createCustomSpace`/`updateCustomSpace`/`archiveCustomSpace` — all guard
+  on `kind === 'custom'` and throw against a bundled space, keeping bundled spaces
+  immutable. `getSpaceById` reads regardless of archived status, so a ritual referencing a
+  deleted custom space can still resolve its photo/mood. `listSpaces` is now active-only,
+  matching `listRituals`.
+- `settingsRepo`: wraps the single settings row; `active_space_id` (new migration column)
+  persists the user's standalone (non-ritual) Focus Space pick across restarts.
+- `theme/moodPalettes.ts`: 6 hand-authored mood palettes (Warm/Cool/Muted/Vivid/Dark/Light)
+  a custom photo space picks from, instead of a native image-color-extraction dependency.
+  `theme/spacePalette.ts`'s `resolveSpacePalette()` resolves any Space (bundled or custom)
+  to its `PaletteColors`, with safe fallbacks for an unknown scene id or missing mood.
+- `lib/imagePicker.ts`: launches `expo-image-picker` and copies the selected photo into
+  persistent `documentDirectory/spaces/` storage via `expo-file-system`'s `File`/
+  `Directory` API — never the picker's own transient cache URI.
+- `spaceStore`: wraps `spacesRepo` + `settingsRepo`, keeps a sorted in-memory cache, and
+  falls back to the default bundled scene if the active standalone pick is ever archived.
+- `SpacesGalleryScreen`, `SpaceCard`, `SpaceEditorScreen` (`/spaces`, `/spaces/new`,
+  `/spaces/[id]` modal routes) — browse bundled and custom spaces, favorite, select,
+  and create/rename/replace-photo/change-mood/delete a custom space.
+- `SceneBackdrop` renders a custom space's photo instead of the drawn gradient, skipping
+  the ambient glow (a colored blob over a user's own photo would read as a bug).
+- Focus screen: tapping the space name now opens the Spaces gallery instead of cycling
+  through bundled scenes. A ritual-tied session's saved space takes priority over the
+  user's standalone pick for as long as that session lasts, and releases that priority the
+  moment a plain, non-ritual session starts.
+- The ritual editor's Focus Space picker and `RitualCard`'s space-name subtitle now draw
+  from the full space list (bundled + custom) instead of the 3 bundled scenes only.
+
+#### Fixed
+
+- A Phase-2-era speculative test in `seed.test.ts` checked an archived bundled-scene row
+  through `listSpaces`, which is now active-only by design — updated to read the row
+  directly via `getSpaceById` instead.
+
 ### Phase 3 — Focus Rituals
 
 #### Added

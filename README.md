@@ -11,8 +11,10 @@ no API keys, no analytics, no paid services.
   (a soft check-in interval instead of a hard cutoff — see [Timer engine](#timer-engine))
 - **Focus/break cycles** with deterministic reconciliation across backgrounding, lock, and
   app kill (see [Timer engine](#timer-engine))
-- **Immersive Focus Spaces** — hand-authored gradient scenes, each with its own adaptive
-  color palette (not a fixed app-wide theme)
+- **Immersive Focus Spaces** — 3 hand-authored gradient scenes, plus your own photos as
+  custom wallpapers with a mood-tag palette (Warm/Cool/Muted/Vivid/Dark/Light), each with
+  its own adaptive color palette (not a fixed app-wide theme) — see
+  [Focus Spaces & custom wallpapers](#focus-spaces--custom-wallpapers) below
 - **Layered ambient sound mixer** with real background playback, independent per-layer
   volume, and sticky lock-screen media-session ownership
 - **Reusable Focus Rituals** — compose a timer mode, Focus Space, and ambient sound mix
@@ -21,7 +23,6 @@ no API keys, no analytics, no paid services.
 - **Minimal Today tasks** *(Phase 6)*
 - **Session history and local statistics** *(Phase 6)*
 - **Local notifications and haptics** *(notifications: Phase 7; haptics: built now)*
-- User-selected custom wallpapers *(Phase 4)*
 
 ## Tech stack
 
@@ -68,35 +69,45 @@ FocusRitual/
       (tabs)/                    Focus | Rituals | Tasks | History | Settings
       rituals/new.tsx             modal — create
       rituals/[id].tsx            modal — edit
+      spaces/index.tsx             modal — gallery
+      spaces/new.tsx               modal — create custom space
+      spaces/[id].tsx              modal — edit custom space
     db/                         expo-sqlite: migrations, repositories (see below)
       client.ts                  getDatabase() — lazily-memoized singleton opener
       schema.ts                  versioned migrations, PRAGMA user_version-driven
       seed.ts                    idempotent bundled spaces/sounds seed
       seedExampleRituals.ts       one-time example-ritual seed (see Focus Rituals below)
-      repositories/               sessionsRepo, spacesRepo, soundsRepo, ritualsRepo
+      repositories/               sessionsRepo, spacesRepo, soundsRepo, ritualsRepo,
+                                  settingsRepo
     domain/                     pure, framework-free, unit-tested business logic
       timer/                     timestamp-based timer engine (see below)
-      palette/                   WCAG contrast helper behind scene palette isDark
+      palette/                   WCAG contrast helper behind scene/mood palette isDark
       ritual/                    Ritual types + sortRituals/duplicateRitualName/
                                   ritualToSessionStart/ritualToActiveMix
+      space/                     Space types + isValidSpaceName/sortSpaces
     store/                      Zustand — one small store per concern, not one mega-store
       timerStore.ts              owns the AppState subscription + refresh interval + persistence
       soundStore.ts              serializable UI state only, delegates to soundEngine
       ritualStore.ts              wraps ritualsRepo, keeps a sorted in-memory cache
-    theme/                      design system — tokens, motion, scene palettes, ThemeProvider
+      spaceStore.ts               wraps spacesRepo + settingsRepo (see Focus Spaces below)
+    theme/                      design system — tokens, motion, palettes, ThemeProvider
+      scenePalettes.ts            3 hand-authored bundled scenes + shared PaletteColors
+      moodPalettes.ts             6 mood palettes for custom-photo spaces
+      spacePalette.ts             resolveSpacePalette() — bundled scene or mood, by kind
     features/
       focus/                     the Focus screen and its subcomponents
       rituals/                   RitualsListScreen, RitualCard, RitualEditorScreen
+      spaces/                    SpacesGalleryScreen, SpaceCard, SpaceEditorScreen
     components/                 shared, theme-aware UI primitives
     lib/                        imperative wrappers around native/expo modules
       audio/soundEngine.ts       AudioPlayer pool, sticky lock-screen ownership
+      imagePicker.ts             picks + copies a photo into persistent app storage
       haptics.ts
 ```
 
-Not created yet — `spacesStore`/`tasksStore`/`settingsStore`, `lib/notifications/
-scheduler.ts`, `lib/imagePicker.ts`, and the `spaces/sounds/tasks/history/settings`
-feature directories. Each arrives with its own phase below rather than being
-pre-stubbed.
+Not created yet — `tasksStore`/`settingsStore` (UI-facing), `lib/notifications/
+scheduler.ts`, and the `sounds/tasks/history/settings` feature directories. Each arrives
+with its own phase below rather than being pre-stubbed.
 
 ## Timer engine
 
@@ -188,6 +199,51 @@ killed-and-relaunched app recovering a ritual-linked session via `hydrate()` (se
 goes through the same session-ritualId effect and restores the scene/sound, not just the
 elapsed time.
 
+## Focus Spaces & custom wallpapers
+
+A Space (`src/domain/space/`) is either **bundled** (one of the 3 hand-authored scenes,
+immutable) or **custom** (a user's own photo). `src/db/repositories/spacesRepo.ts` is the
+CRUD boundary: `createCustomSpace`/`updateCustomSpace`/`archiveCustomSpace` all guard on
+`kind === 'custom'` and throw if pointed at a bundled space — bundled spaces are never
+editable or deletable through the app, matching Phase 1's "keep bundled assets immutable"
+design. `src/store/spaceStore.ts` wraps the repo with a favorite/last-used-sorted cache
+(`domain/space`'s `sortSpaces`, the same ordering rule as `sortRituals`).
+
+**Photo storage**: `src/lib/imagePicker.ts` launches `expo-image-picker` and copies the
+selected photo into `Paths.document`'s `spaces/` subdirectory via `expo-file-system`'s
+`File`/`Directory` API, under a generated filename — never the picker's own asset URI,
+which is a transient cache path with no durability guarantee across an app restart. Web
+returns the picker's own URI directly (already a self-contained blob/data URI, with no
+native document directory to copy into) so the browser preview stays usable for
+everything except the native copy step itself.
+
+**Mood palettes instead of color extraction**: rather than a native
+image-color-extraction dependency, a custom space picks one of 6 pre-authored mood
+palettes (`src/theme/moodPalettes.ts`: Warm/Cool/Muted/Vivid/Dark/Light).
+`src/theme/spacePalette.ts`'s `resolveSpacePalette()` is the single place that turns any
+Space into the `PaletteColors` its backdrop/UI should use — a bundled space's hand-tuned
+scene palette, or a custom space's chosen mood palette, with a safe fallback (default
+scene, or the "warm" mood) if either reference is ever missing.
+
+**Fallback when a custom space is deleted**: `archiveCustomSpace` soft-deletes — the row,
+its `image_uri`, and its `palette_mood` all stay intact, so a ritual that still points at
+it keeps resolving the exact same photo and palette (`spacesRepo.getSpaceById` reads
+regardless of archived status). Deleting only removes it from the gallery and future space
+pickers (`listSpaces` is active-only, matching `listRituals`). If the *standalone* Focus
+Space the user had picked (not through a ritual) is the one archived, `spaceStore` falls
+back to the default bundled scene rather than pointing the Focus screen at nothing.
+
+**Switching spaces**: `SpacesGalleryScreen` (`/spaces`) shows bundled and active custom
+spaces in a grid — tap to select, star to favorite, and (custom only) an edit icon into
+`SpaceEditorScreen` (`/spaces/new` and `/spaces/[id]`) to rename, replace the photo, or
+change mood, plus a delete action. On the Focus screen, tapping the space name opens the
+gallery instead of the old scene-cycling button. Selecting a space there persists
+immediately via `spaceStore.selectSpace()` → `settingsRepo.setActiveSpaceId()`, so it
+survives an app restart independently of any ritual. A ritual-tied session's own saved
+space takes priority over that standalone pick for as long as the session lasts (mirroring
+[Focus Rituals](#focus-rituals)' start/cold-start-recovery design above) and releases that
+priority the moment a plain, non-ritual session starts.
+
 ## Ambient sound mixer
 
 `src/lib/audio/soundEngine.ts` is a singleton holding a pool of `expo-audio` `AudioPlayer`
@@ -203,15 +259,18 @@ verified on a real Android device (see [Verification](#verification) below) — 
 cannot reproduce native background-audio behavior that depends on `app.json` config
 plugins baked into a real build.
 
-## Adaptive scene palettes
+## Neutral chrome vs. scene palettes
 
-Each bundled Focus Space (`src/theme/scenePalettes.ts`) is a hand-authored color palette,
-not extracted from a photo — hand-tuned reads as more premium than algorithmic extraction,
-and keeps every bundled scene license-free (`SceneBackdrop.tsx` draws it as a gradient in
-code, no image asset). `ThemeProvider` exposes two independent palettes: a **neutral
-chrome palette** (light/dark, for ordinary app screens) and `useScenePalette(sceneId)`
-(keyed by the active Focus Space, consumed only by the Focus screen) — so the rest of the
-app stays coherent while the Focus screen adapts per scene.
+`ThemeProvider` exposes two independent palettes: a **neutral chrome palette**
+(light/dark, for ordinary app screens like Rituals/Tasks/History/Settings) and
+`useScenePalette(sceneId)`/`resolveSpacePalette(space)` (keyed by the active Focus Space,
+consumed only by the Focus screen and its backdrop) — so the rest of the app stays
+coherent while the Focus screen adapts per space. Bundled scenes
+(`src/theme/scenePalettes.ts`) are hand-authored, not extracted from a photo — hand-tuned
+reads as more premium than algorithmic extraction, and keeps every bundled scene
+license-free (`SceneBackdrop.tsx` draws it as a gradient in code, no image asset). Custom
+spaces use the mood palette system instead — see
+[Focus Spaces & custom wallpapers](#focus-spaces--custom-wallpapers) above.
 
 ## Phase roadmap
 
@@ -234,11 +293,13 @@ rituals seeded once on first run, and start-from-ritual on the Focus screen that
 correctly restores the ritual's scene/sound even across a cold-start recovery, not just
 an explicit start. See [Focus Rituals](#focus-rituals) above.
 
-**Phase 4 — Focus Spaces gallery & custom wallpapers.** Bundled scene gallery,
-`expo-image-picker` flow that copies the picked photo into `documentDirectory`
-(`expo-file-system`) for durable local storage, and a mood-tag palette chooser
+**Phase 4 — Focus Spaces gallery & custom wallpapers.** ✅ `spacesRepo` custom-space CRUD
+(bundled spaces stay immutable), `spaceStore`, `SpacesGalleryScreen` + `SpaceEditorScreen`,
+`lib/imagePicker.ts` (copies the picked photo into persistent `documentDirectory/spaces/`
+storage, never the picker's transient URI), and the mood-tag palette chooser
 (Warm/Cool/Muted/Vivid/Dark/Light → one of 6 pre-authored palettes) instead of pixel-based
-color extraction — keeps dependencies minimal.
+color extraction. See
+[Focus Spaces & custom wallpapers](#focus-spaces--custom-wallpapers) above.
 
 **Phase 5 — Sound library & mixer polish.** Full bundled catalog, crossfade polish, saving
 a mix into a Ritual, the mixer as a shared component (Focus screen + Ritual editor).
@@ -257,20 +318,25 @@ performance pass.
 
 ## Verification
 
-Before Phase 4 begins, all of the following must pass:
+Before Phase 5 begins, all of the following must pass:
 
 1. `npm run typecheck`, `npm run lint`, `npx expo-doctor` — all clean.
 2. `npm test` — passes, including `domain/timer/timerEngine`, `domain/palette/
-   paletteContrast`, `domain/ritual/ritual`, and every `db/__tests__` suite (migrations,
-   `sessionsRepo`, `ritualsRepo`, bundled-data seed idempotency, example-ritual seed
+   paletteContrast`, `domain/ritual/ritual`, `domain/space/space`, `theme/spacePalette`,
+   and every `db/__tests__` suite (migrations, `sessionsRepo`, `ritualsRepo`,
+   `spacesRepo`, `settingsRepo`, bundled-data seed idempotency, example-ritual seed
    idempotency — run against a real `node:sqlite`-backed database, not a hand-rolled mock).
-3. In the Expo preview: Focus tab renders correctly (hero timer, scene backdrop, all 6
-   modes); Rituals tab shows the 3 seeded examples; create/edit/duplicate/delete/favorite
+3. In the Expo (web) preview: Focus tab renders correctly (hero timer, scene backdrop, all
+   6 modes); Rituals tab shows the 3 seeded examples; create/edit/duplicate/delete/favorite
    all work and the list re-sorts correctly; starting a ritual switches to the Focus tab
    with its scene and sound mix loaded and the timer running with its saved
-   mode/durations; the other 3 tabs render their empty state without crashing.
+   mode/durations; the Spaces gallery opens from the Focus screen, shows the 3 bundled
+   scenes, lets a custom space be created/favorited/edited/renamed/deleted, and switching
+   spaces updates the Focus screen immediately and persists across a reload; a ritual
+   referencing a since-deleted custom space still starts correctly with that space's
+   original photo/mood; the other 3 tabs render their empty state without crashing.
 4. **Real-device smoke tests on a real Android device** (a dev client build if Expo Go
-   can't reproduce the native background behavior being tested):
+   can't reproduce the native behavior being tested):
    - Start a timer, lock/background the phone, foreground it — elapsed time reconciles
      correctly with no drift or double-counting.
    - Start a timer, force-quit the app, relaunch it — the session recovers with elapsed
@@ -282,3 +348,9 @@ Before Phase 4 begins, all of the following must pass:
      mixes, and ramps.
    - With a sound mix playing, lock the screen and background the app for several
      minutes — playback continues uninterrupted.
+   - Pick a photo from the device's own library as a custom Focus Space — confirm the
+     photo persists (force-quit and relaunch, then check the space still shows it) rather
+     than depending on the picker's own transient cache URI. This is the one Phase 4 path
+     that can't be meaningfully exercised through the web preview, since `imagePicker.ts`
+     takes a different (untested-here) code path on web — see
+     [Focus Spaces & custom wallpapers](#focus-spaces--custom-wallpapers) above.

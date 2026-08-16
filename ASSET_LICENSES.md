@@ -29,3 +29,10 @@ Bundled Focus Space backdrops (Amber Study, Rain Window, Midnight Forest — see
 placeholder defaults from the Expo `create-expo-app` project template, used as scaffolding
 until the app has its own icon design. Provided under the same terms as the Expo template
 itself (MIT — see `LICENSE`).
+
+## Custom Focus Space photos (out of scope for this file)
+
+Phase 4 lets a user add their own photos as custom Focus Spaces (`src/lib/imagePicker.ts`
+copies the picked photo into local, per-device app storage). These photos are user content,
+never bundled with the app or committed to this repository, so they carry no license entry
+here — this file only tracks assets FocusRitual itself ships in `assets/`.
