@@ -26,6 +26,14 @@ import { TimerRing } from './TimerRing';
 
 const ACTIVE_STATUSES = new Set(['running', 'paused', 'awaiting-start']);
 
+/** Cache-first (ritualStore), falling back to a direct DB read if the store hasn't loaded yet. */
+async function resolveRitual(id: string): Promise<Ritual | null> {
+  const cached = useRitualStore.getState().rituals.find((r) => r.id === id);
+  if (cached) return cached;
+  const db = await getDatabase();
+  return getRitualById(db, id);
+}
+
 export function FocusScreen() {
   const theme = useTheme();
   const { width } = useWindowDimensions();
@@ -54,45 +62,63 @@ export function FocusScreen() {
   const isSessionActive = session != null && ACTIVE_STATUSES.has(session.status);
 
   // Started from a ritual (RitualCard's "Start" button navigates here with this param).
-  // Loads the ritual's saved space + sound mix and starts a session with its settings.
+  // Only responsible for creating the session — applying the ritual's scene/sound mix is
+  // handled below by the session.ritualId effect, so it also covers cold-start recovery.
   const { startRitualId } = useLocalSearchParams<{ startRitualId?: string }>();
-  const processedRitualIdRef = useRef<string | null>(null);
+  const startedRitualIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!startRitualId || processedRitualIdRef.current === startRitualId) return;
-    processedRitualIdRef.current = startRitualId;
+    if (!startRitualId || startedRitualIdRef.current === startRitualId) return;
+    startedRitualIdRef.current = startRitualId;
 
     let cancelled = false;
-
-    function begin(ritual: Ritual) {
-      if (cancelled) return;
-      haptics.tap();
-      if (ritual.spaceId) setSceneId(ritual.spaceId as SceneId);
-      soundSetMix(ritualToActiveMix(ritual));
-      const sessionStart = ritualToSessionStart(ritual);
-      start(sessionStart.mode, sessionStart);
-      soundPlay();
-      void useRitualStore.getState().markUsed(ritual.id);
-    }
-
-    const cached = useRitualStore.getState().rituals.find((r) => r.id === startRitualId);
-    if (cached) {
-      begin(cached);
-    } else {
-      getDatabase()
-        .then((db) => getRitualById(db, startRitualId))
-        .then((ritual) => {
-          if (ritual) begin(ritual);
-        })
-        .catch((error: unknown) => {
-          console.error('[FocusScreen] failed to start from ritual', error);
-        });
-    }
+    resolveRitual(startRitualId)
+      .then((ritual) => {
+        if (!ritual || cancelled) return;
+        haptics.tap();
+        const sessionStart = ritualToSessionStart(ritual);
+        start(sessionStart.mode, sessionStart);
+        void useRitualStore.getState().markUsed(ritual.id);
+      })
+      .catch((error: unknown) => {
+        console.error('[FocusScreen] failed to start from ritual', error);
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [startRitualId, start, soundPlay, soundSetMix]);
+  }, [startRitualId, start]);
+
+  // Reflects whichever ritual the *current session* is tied to — fires both right after
+  // the effect above creates a session, and when a running/paused session recovers from a
+  // cold start (timerStore's hydrate() sets session.ritualId directly, bypassing the
+  // param-driven effect above entirely). Without this, a killed-and-relaunched app would
+  // recover the correct elapsed time but silently drop back to the default scene/sound
+  // mix instead of the ritual's.
+  const sessionRitualId = session?.ritualId ?? null;
+  const sessionStatus = session?.status ?? null;
+  const appliedRitualIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionRitualId || appliedRitualIdRef.current === sessionRitualId) return;
+    appliedRitualIdRef.current = sessionRitualId;
+
+    let cancelled = false;
+    resolveRitual(sessionRitualId)
+      .then((ritual) => {
+        if (!ritual || cancelled) return;
+        if (ritual.spaceId) setSceneId(ritual.spaceId as SceneId);
+        soundSetMix(ritualToActiveMix(ritual));
+        if (sessionStatus === 'running') soundPlay();
+      })
+      .catch((error: unknown) => {
+        console.error('[FocusScreen] failed to apply ritual scene/mix', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionRitualId, sessionStatus, soundSetMix, soundPlay]);
 
   const handleStart = () => {
     haptics.tap();
