@@ -4,7 +4,7 @@ import { Chip } from '@/components/Chip';
 import type { TimerMode } from '@/domain/timer/types';
 import { useTheme } from '@/theme/ThemeProvider';
 
-const MODE_LABELS: Record<TimerMode, string> = {
+export const MODE_LABELS: Record<TimerMode, string> = {
   pomodoro: 'Pomodoro',
   deepWork: 'Deep Work',
   ninety: '90 Minute',
