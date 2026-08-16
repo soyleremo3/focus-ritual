@@ -15,8 +15,10 @@ no API keys, no analytics, no paid services.
   custom wallpapers with a mood-tag palette (Warm/Cool/Muted/Vivid/Dark/Light), each with
   its own adaptive color palette (not a fixed app-wide theme) — see
   [Focus Spaces & custom wallpapers](#focus-spaces--custom-wallpapers) below
-- **Layered ambient sound mixer** with real background playback, independent per-layer
-  volume, and sticky lock-screen media-session ownership
+- **Layered ambient sound mixer** — 7 bundled loops across 3 categories, multiple
+  simultaneous layers, independent per-layer volume, a master volume, smooth crossfades on
+  every add/remove, real background playback, and sticky lock-screen media-session
+  ownership (see [Ambient sound mixer](#ambient-sound-mixer) below)
 - **Reusable Focus Rituals** — compose a timer mode, Focus Space, and ambient sound mix
   into a named preset; start a session directly from one (see
   [Focus Rituals](#focus-rituals) below)
@@ -85,6 +87,8 @@ FocusRitual/
       ritual/                    Ritual types + sortRituals/duplicateRitualName/
                                   ritualToSessionStart/ritualToActiveMix
       space/                     Space types + isValidSpaceName/sortSpaces
+      sound/                     framework-independent sound engine core (see
+                                  Ambient sound mixer below) + selectLockScreenOwner
     store/                      Zustand — one small store per concern, not one mega-store
       timerStore.ts              owns the AppState subscription + refresh interval + persistence
       soundStore.ts              serializable UI state only, delegates to soundEngine
@@ -98,9 +102,11 @@ FocusRitual/
       focus/                     the Focus screen and its subcomponents
       rituals/                   RitualsListScreen, RitualCard, RitualEditorScreen
       spaces/                    SpacesGalleryScreen, SpaceCard, SpaceEditorScreen
+      sound/                     SoundMixEditor — shared by the mixer sheet and the
+                                  ritual editor's sound-mix draft
     components/                 shared, theme-aware UI primitives
     lib/                        imperative wrappers around native/expo modules
-      audio/soundEngine.ts       AudioPlayer pool, sticky lock-screen ownership
+      audio/soundEngine.ts       thin expo-audio wrapper around domain/sound's engine core
       imagePicker.ts             picks + copies a photo into persistent app storage
       haptics.ts
 ```
@@ -246,12 +252,52 @@ priority the moment a plain, non-ritual session starts.
 
 ## Ambient sound mixer
 
-`src/lib/audio/soundEngine.ts` is a singleton holding a pool of `expo-audio` `AudioPlayer`
-instances, one per active layer, each independently volume-ramped (400–600ms, no hard
-cuts). Exactly one player owns lock-screen/background-session activation
-(`setActiveForLockScreen`), and that ownership is **sticky** — it changes only when the
-current owner's layer is removed from the mix, never on volume changes. Every removed
-player has `.remove()` called on it; nothing leaks.
+**Library**: 7 procedurally-synthesized loops (`assets/sounds/`, see
+`ASSET_LICENSES.md`) across 3 categories — Rain/Ocean Waves/Wind (nature), White/Brown/Pink
+Noise (noise), Fireplace (ambience). `src/features/sound/SoundMixEditor.tsx` is a shared
+category-filter-plus-search editor used both by the live mixer sheet on the Focus screen
+and by the ritual editor's local sound-mix draft, so the two never drift into duplicated
+list-rendering code.
+
+**Engine**: `src/domain/sound/soundEngine.ts` is the framework-independent core (no
+expo-audio import — just an `EnginePlayer` interface a real player or a test fake can
+satisfy), unit-tested with fake timers and a fake player. `src/lib/audio/soundEngine.ts`
+is a thin wrapper plugging real `expo-audio` `AudioPlayer`s into it as the app's singleton
+instance. `setMix()` reconciles the active player pool against a desired mix:
+
+- A newly-added layer ramps in from 0 (500ms).
+- A removed layer **fades out over the same ramp before being released** — not an
+  instant cut, which is what smooth crossfading requires and what the original Phase 1
+  implementation didn't do.
+- If a layer reappears while its old instance is still mid-fade-out toward removal, the
+  pending removal is cancelled and the *same* player instance ramps back up — rapid
+  toggling can never produce a duplicate player or a leaked one.
+- An unknown sound id is skipped rather than left as a dangling entry.
+
+Exactly one player owns lock-screen/background-session activation
+(`setActiveForLockScreen`), chosen by `selectLockScreenOwner()` — a pure, unit-tested
+function. Ownership is **sticky**: it changes only when the current owner's layer is
+removed from the mix, never on a volume change or a new layer joining, with a
+highest-current-volume (lowest-id tie-break) rule for picking the replacement. This exact
+algorithm carried over unchanged from Phase 1 through the Phase 5 engine extraction —
+only its home and test coverage changed.
+
+**Master volume**: `soundStore` holds a `masterVolume` (0–1) alongside each layer's own
+volume; the engine itself has no separate "master" concept; the store just computes
+`layerVolume × masterVolume` for every layer before calling the same `setMix()`/
+`setLayerVolume()` the engine already exposed. A master volume change therefore gets the
+exact same smooth ramp as any other volume change, for free.
+
+**Persistence and ritual override**: `settingsRepo`'s `active_sound_mix` (JSON) and
+`master_volume` columns hold the user's *standalone* mix — every freeform edit
+(`toggleLayer`/`setLayerVolume`/`setMasterVolume`) persists it, and a module-load
+`hydrate()` restores it on app start (loaded, but not auto-played — ambient audio
+starting itself the instant the app opens would be surprising). Applying a ritual's saved
+mix (`applyRitualMix`, used by [Focus Rituals](#focus-rituals)' start/cold-start-recovery
+flow) is a **live override that never persists**, mirroring how a ritual's Focus Space
+overrides the standalone pick without clobbering it (Phase 4) — starting a plain,
+non-ritual session calls `restoreStandaloneMix()` to release that override and fall back
+to the user's own saved mix.
 
 Audio mode is configured once in `src/app/_layout.tsx` with `interruptionMode: 'doNotMix'`
 and `shouldPlayInBackground: true`. Sustained background/lock-screen playback needs to be
@@ -301,8 +347,12 @@ storage, never the picker's transient URI), and the mood-tag palette chooser
 color extraction. See
 [Focus Spaces & custom wallpapers](#focus-spaces--custom-wallpapers) above.
 
-**Phase 5 — Sound library & mixer polish.** Full bundled catalog, crossfade polish, saving
-a mix into a Ritual, the mixer as a shared component (Focus screen + Ritual editor).
+**Phase 5 — Sound library & mixer polish.** ✅ Bundled library expanded 3 → 7 loops across
+nature/noise/ambience categories; `domain/sound` engine core extracted and unit-tested
+(fixing an abrupt-cut-on-removal gap and a rapid-toggle duplicate-player race along the
+way); master volume; standalone mix persisted via `settingsRepo` and restored (not
+auto-played) on app start; `SoundMixEditor` shared between the mixer sheet and the ritual
+editor's sound-mix draft. See [Ambient sound mixer](#ambient-sound-mixer) above.
 
 **Phase 6 — Today tasks + History/stats.** Task CRUD linked to sessions,
 `domain/stats/statsAggregation.ts`, and a `HistoryScreen` built from plain Views — no
@@ -318,14 +368,17 @@ performance pass.
 
 ## Verification
 
-Before Phase 5 begins, all of the following must pass:
+Before Phase 6 begins, all of the following must pass:
 
 1. `npm run typecheck`, `npm run lint`, `npx expo-doctor` — all clean.
 2. `npm test` — passes, including `domain/timer/timerEngine`, `domain/palette/
-   paletteContrast`, `domain/ritual/ritual`, `domain/space/space`, `theme/spacePalette`,
+   paletteContrast`, `domain/ritual/ritual`, `domain/space/space`, `domain/sound/
+   soundEngine` (fake-timer-driven: no duplicate players, fade-out-before-release,
+   cancel-pending-removal-on-re-add, sticky lock-screen ownership), `theme/spacePalette`,
    and every `db/__tests__` suite (migrations, `sessionsRepo`, `ritualsRepo`,
-   `spacesRepo`, `settingsRepo`, bundled-data seed idempotency, example-ritual seed
-   idempotency — run against a real `node:sqlite`-backed database, not a hand-rolled mock).
+   `spacesRepo`, `settingsRepo` including the sound-mix/master-volume columns,
+   bundled-data seed idempotency, example-ritual seed idempotency — run against a real
+   `node:sqlite`-backed database, not a hand-rolled mock).
 3. In the Expo (web) preview: Focus tab renders correctly (hero timer, scene backdrop, all
    6 modes); Rituals tab shows the 3 seeded examples; create/edit/duplicate/delete/favorite
    all work and the list re-sorts correctly; starting a ritual switches to the Focus tab
@@ -334,7 +387,12 @@ Before Phase 5 begins, all of the following must pass:
    scenes, lets a custom space be created/favorited/edited/renamed/deleted, and switching
    spaces updates the Focus screen immediately and persists across a reload; a ritual
    referencing a since-deleted custom space still starts correctly with that space's
-   original photo/mood; the other 3 tabs render their empty state without crashing.
+   original photo/mood; the sound mixer shows all 7 sounds with working category/search
+   filters, multiple simultaneous layers, per-layer and master volume sliders, and a
+   master play/pause; the standalone mix (layers + master volume) persists across a
+   reload and restores loaded-but-paused; editing a ritual's sound mix in its editor saves
+   correctly and starting that ritual applies the saved mix; the other 3 tabs render their
+   empty state without crashing.
 4. **Real-device smoke tests on a real Android device** (a dev client build if Expo Go
    can't reproduce the native behavior being tested):
    - Start a timer, lock/background the phone, foreground it — elapsed time reconciles
@@ -344,10 +402,15 @@ Before Phase 5 begins, all of the following must pass:
    - Start a session from a ritual, force-quit, relaunch — both the elapsed time *and*
      the ritual's scene/sound mix recover (Phase 3's addition to cold-start recovery,
      verified in the web preview; confirm on-device too).
-   - Toggle sound layers and drag their volume in the mixer sheet — real audio plays,
-     mixes, and ramps.
-   - With a sound mix playing, lock the screen and background the app for several
-     minutes — playback continues uninterrupted.
+   - Toggle several sound layers on/off in quick succession and drag their volume plus the
+     master volume in the mixer sheet — real audio plays, layers crossfade smoothly with
+     no clicks or gaps, and rapid toggling never produces overlapping/doubled playback of
+     the same sound.
+   - With a multi-layer sound mix playing, lock the screen and background the app for
+     several minutes — playback continues uninterrupted and lock-screen media controls
+     stay attached to the same sticky-owner layer throughout.
+   - Force-quit and relaunch with a standalone (non-ritual) mix active — the same layers
+     and volumes are loaded on the Focus screen, paused, exactly as persisted.
    - Pick a photo from the device's own library as a custom Focus Space — confirm the
      photo persists (force-quit and relaunch, then check the space still shows it) rather
      than depending on the picker's own transient cache URI. This is the one Phase 4 path

@@ -8,6 +8,44 @@ semantic versioning until a `1.0.0` release.
 
 ## [Unreleased]
 
+### Phase 5 — Sound Library & Mixer Polish
+
+#### Added
+
+- Bundled ambient library expanded from 3 to 7 procedurally-synthesized loops: Ocean
+  Waves, Wind, Pink Noise, and Fireplace, grouped with the originals into nature/noise/
+  ambience categories.
+- `domain/sound`: `createSoundEngine()`, a framework-independent engine core (no
+  expo-audio import) taking an injectable player factory — unit-tested with fake timers
+  and a fake player. `selectLockScreenOwner()` and `clampVolume`/`effectiveVolume` are
+  pulled out as pure functions alongside it.
+- `lib/audio/soundEngine.ts` is now a thin wrapper: real `expo-audio` players plugged into
+  the domain engine.
+- `soundStore`: `masterVolume` (multiplies every layer's effective volume through the
+  engine's existing `setMix`, no new engine-side concept needed), persistence of the
+  standalone mix + master volume via `settingsRepo` on every freeform edit, and a
+  module-load `hydrate()` that restores it without auto-playing.
+- `settingsRepo`: `active_sound_mix` (JSON) and `master_volume` columns (migration v3),
+  mirroring Phase 4's `active_space_id` persistence pattern.
+- `SoundMixEditor` (`features/sound/`): category filter chips, a search box, and the
+  layer toggle/volume-bar list — shared by the live mixer sheet and the ritual editor's
+  local sound-mix draft instead of duplicated between them. An optional master volume row
+  shows only for the live mixer.
+- `SoundMixerSheet`: master play/pause toggle and master volume slider, built on the
+  shared editor.
+
+#### Fixed
+
+- Removing a sound layer used to `pause()`+`remove()` its player immediately — an audible
+  click, not a crossfade. It now fades to 0 over the same ramp additions use, then
+  releases the player.
+- Re-adding a layer while its previous instance was still mid-fade-out toward removal
+  would have raced a duplicate player into existence under rapid toggling. The pending
+  removal is now cancelled and the same player instance is reused instead.
+- Applying a ritual's saved sound mix (`applyRitualMix`) no longer persists as the user's
+  standalone baseline — it's a live override, same as Phase 4's Focus Space override,
+  released back to the standalone mix the moment a plain (non-ritual) session starts.
+
 ### Phase 4 — Focus Spaces & Custom Wallpapers
 
 #### Added
