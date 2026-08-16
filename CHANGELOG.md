@@ -38,6 +38,8 @@ semantic versioning until a `1.0.0` release.
 - `HistoryScreen` (Today/Week/Month summary cards, a custom 7-day bar chart, weekly
   rhythm, favorite ritual, best focus time of day, ritual/task breakdowns — plain `View`s,
   no charting dependency), wired into the History tab.
+- `features/history/SessionListItem.tsx` + a "Recent Sessions" list on `HistoryScreen`:
+  every terminal session stays visible, cancelled ones dimmed and tagged "Cancelled".
 
 #### Fixed
 
@@ -48,6 +50,15 @@ semantic versioning until a `1.0.0` release.
   `computeTotalFocusMs`'s own current-phase check added it a second time. Fixed by only
   bumping `bankedFocusMs` in the branches that actually move `phase` away from a
   closed-out segment.
+- Cancelled sessions were counting toward every stat (focus totals, session counts,
+  7-day/weekly-rhythm charts, favorite ritual, best focus time) alongside completed ones —
+  an abandoned 30-second session shouldn't weigh the same as one seen through to
+  completion. `statsAggregation.ts` now filters cancelled sessions out of `summarize`,
+  `groupBy` (and so `groupByRitual`/`groupByTask`/`favoriteRitualId`), `bestFocusSegment`,
+  and `weeklyRhythm`; they still render in History's new "Recent Sessions" list, just
+  excluded from the aggregates. Sessions ended via `finish()` are unaffected (they land in
+  `'completed'`, same as a natural finish). Regression tests added for every aggregate
+  function.
 
 ### Phase 5 — Sound Library & Mixer Polish
 

@@ -112,7 +112,7 @@ FocusRitual/
       sound/                     SoundMixEditor — shared by the mixer sheet and the
                                   ritual editor's sound-mix draft
       tasks/                     TodayScreen, TaskCard
-      history/                   HistoryScreen, SummaryCard, Bar, BreakdownList
+      history/                   HistoryScreen, SummaryCard, Bar, BreakdownList, SessionListItem
     components/                 shared, theme-aware UI primitives
     lib/                        imperative wrappers around native/expo modules
       audio/soundEngine.ts       thin expo-audio wrapper around domain/sound's engine core
@@ -367,6 +367,15 @@ days of the week you tend to focus). Every total is derived from
 `computeTotalFocusMs()` over the persisted rows — nothing here is a separately-maintained
 counter that could drift out of sync with the sessions table.
 
+**Cancelled sessions are excluded from every productivity aggregate above** (an internal
+`isProductive()` filter applied inside `summarize`/`groupBy`/`bestFocusSegment`/
+`weeklyRhythm`) — a session abandoned after 30 seconds shouldn't count the same as one seen
+through to completion or ended deliberately via `finish()` (which sets `status: 'completed'`,
+so it's indistinguishable from a natural finish once terminal). They still appear in
+`HistoryScreen`'s "Recent Sessions" list (`features/history/SessionListItem.tsx`), dimmed
+and tagged "Cancelled", so the record isn't hidden — it's just not counted toward focus
+totals, session counts, the 7-day/weekly-rhythm charts, favorite ritual, or best focus time.
+
 `HistoryScreen` composes these over data loaded once per tab-focus (`useFocusEffect`,
 matching `RitualsListScreen`/`TodayScreen`'s pattern) and renders a custom 7-day bar chart
 plus a weekly-rhythm chart as plain `View`s (`features/history/Bar.tsx`) — no charting
@@ -433,7 +442,8 @@ previously only ever end as `'cancelled'`) alongside `bankedFocusMs` (a real
 double-counting bug in Flow Mode's halt branch was caught by a test written for this
 change and fixed before it shipped — see [Timer engine](#timer-engine) above).
 `domain/stats/statsAggregation.ts` and `HistoryScreen` — see
-[History & Statistics](#history--statistics) above.
+[History & Statistics](#history--statistics) above. Cancelled sessions stay visible in
+History (marked "Cancelled") but are excluded from every stat.
 
 **Phase 7 — Notifications, haptics polish, Settings.** Full local-notification scheduling
 for session completion (idempotent cancel-and-reschedule on every pause/resume/skip, the
