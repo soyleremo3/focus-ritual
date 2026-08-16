@@ -1,6 +1,8 @@
 import { AppState, type AppStateStatus } from 'react-native';
 import { create } from 'zustand';
 
+import { getDatabase } from '@/db/client';
+import { getActiveSession, upsertSession } from '@/db/repositories/sessionsRepo';
 import { generateId } from '@/domain/id';
 import {
   advancePhase as advancePhaseEngine,
@@ -52,6 +54,19 @@ function startInterval() {
   }, TICK_INTERVAL_MS);
 }
 
+/**
+ * Fire-and-forget persistence — store actions stay synchronous so call sites don't need
+ * to await them. getDatabase() is memoized, so this reuses the same connection every
+ * action ever opens.
+ */
+function persistSession(session: TimerSession, now: number): void {
+  getDatabase()
+    .then((db) => upsertSession(db, session, now))
+    .catch((error: unknown) => {
+      console.error('[timerStore] failed to persist session', error);
+    });
+}
+
 export const useTimerStore = create<TimerStoreState>()((set, get) => ({
   session: null,
   tick: 0,
@@ -69,48 +84,65 @@ export const useTimerStore = create<TimerStoreState>()((set, get) => ({
     });
     set({ session });
     startInterval();
+    persistSession(session, now);
   },
 
   pause: () => {
     const { session } = get();
     if (!session) return;
-    set({ session: pauseEngine(session, Date.now()) });
+    const now = Date.now();
+    const next = pauseEngine(session, now);
+    set({ session: next });
     stopInterval();
+    persistSession(next, now);
   },
 
   resume: () => {
     const { session } = get();
     if (!session) return;
-    set({ session: resumeEngine(session, Date.now()) });
+    const now = Date.now();
+    const next = resumeEngine(session, now);
+    set({ session: next });
     startInterval();
+    persistSession(next, now);
   },
 
   advancePhase: () => {
     const { session } = get();
     if (!session) return;
-    set({ session: advancePhaseEngine(session, Date.now()) });
+    const now = Date.now();
+    const next = advancePhaseEngine(session, now);
+    set({ session: next });
     startInterval();
+    persistSession(next, now);
   },
 
   continueFocus: (extendMinutes) => {
     const { session } = get();
     if (!session) return;
-    set({ session: continueFocusEngine(session, extendMinutes, Date.now()) });
+    const now = Date.now();
+    const next = continueFocusEngine(session, extendMinutes, now);
+    set({ session: next });
     startInterval();
+    persistSession(next, now);
   },
 
   cancel: () => {
     const { session } = get();
     if (!session) return;
-    set({ session: cancelEngine(session, Date.now()) });
+    const now = Date.now();
+    const next = cancelEngine(session, now);
+    set({ session: next });
     stopInterval();
+    persistSession(next, now);
   },
 }));
 
 /**
  * Own AppState subscription, set up once for the app's lifetime (this module is a
  * singleton). Background stops the interval only — timestamps are never mutated.
- * Foreground runs the deterministic reconcile() loop before restarting it.
+ * Foreground runs the deterministic reconcile() loop before restarting it, and persists
+ * the reconciled result so a kill immediately after foregrounding doesn't lose it.
  */
 AppState.addEventListener('change', (next: AppStateStatus) => {
   if (next === 'background' || next === 'inactive') {
@@ -120,12 +152,38 @@ AppState.addEventListener('change', (next: AppStateStatus) => {
   if (next === 'active') {
     const { session } = useTimerStore.getState();
     if (session && session.status === 'running') {
-      const reconciled = reconcile(session, Date.now());
+      const now = Date.now();
+      const reconciled = reconcile(session, now);
       useTimerStore.setState({ session: reconciled });
       if (reconciled.status === 'running') startInterval();
+      persistSession(reconciled, now);
     }
   }
 });
+
+/**
+ * Cold-start recovery — runs once at module load. Reads the most recently updated
+ * active session (if any survived a kill), reconciles it against the current time with
+ * the exact same reconcile() used for backgrounding (a kill is just an extreme case of
+ * "the app wasn't running for a while"), and persists the reconciled result back.
+ */
+async function hydrate(): Promise<void> {
+  try {
+    const db = await getDatabase();
+    const active = await getActiveSession(db);
+    if (!active) return;
+
+    const now = Date.now();
+    const reconciled = reconcile(active, now);
+    useTimerStore.setState({ session: reconciled });
+    if (reconciled.status === 'running') startInterval();
+    await upsertSession(db, reconciled, now);
+  } catch (error) {
+    console.error('[timerStore] failed to hydrate session', error);
+  }
+}
+
+void hydrate();
 
 /** Re-renders on every tick so the returned value stays live while running. */
 export function useElapsedMs(): number | null {
