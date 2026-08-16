@@ -242,7 +242,7 @@ export function FocusScreen() {
     soundPause();
   };
   const handleFinish = () => {
-    haptics.select();
+    haptics.success();
     finish();
     soundPause();
   };
