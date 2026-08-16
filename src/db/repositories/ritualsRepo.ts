@@ -95,6 +95,17 @@ export async function countRituals(db: Database): Promise<number> {
   return row?.count ?? 0;
 }
 
+/**
+ * Includes archived rituals — distinguishes "this user has never had a ritual" from
+ * "this user currently has zero active rituals" (e.g. right after deleting all of them).
+ * seedExampleRitualsIfEmpty needs the former, not the latter — otherwise deleting every
+ * example ritual would resurrect them on the next app start.
+ */
+export async function countAllRituals(db: Database): Promise<number> {
+  const row = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM rituals', []);
+  return row?.count ?? 0;
+}
+
 export async function createRitual(db: Database, draft: RitualDraft, now: number): Promise<Ritual> {
   const id = generateId();
   await db.withTransactionAsync(async () => {
