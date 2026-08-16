@@ -31,6 +31,11 @@ export async function listTasks(db: Database): Promise<Task[]> {
   return rows.map(rowToTask);
 }
 
+export async function getTaskById(db: Database, id: string): Promise<Task | null> {
+  const row = await db.getFirstAsync<TaskRow>('SELECT * FROM tasks WHERE id = ?', [id]);
+  return row ? rowToTask(row) : null;
+}
+
 export async function createTask(db: Database, title: string, now: number = Date.now()): Promise<Task> {
   const id = generateId();
   const sortOrder = nextSortOrder(await listTasks(db));

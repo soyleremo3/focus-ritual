@@ -7,6 +7,7 @@ import { IconButton } from '@/components/IconButton';
 import { Text } from '@/components/Text';
 import { getDatabase } from '@/db/client';
 import { getRitualById } from '@/db/repositories/ritualsRepo';
+import { getTaskById } from '@/db/repositories/tasksRepo';
 import { ritualToActiveMix, ritualToSessionStart } from '@/domain/ritual/ritual';
 import type { Ritual } from '@/domain/ritual/types';
 import { MODE_DEFAULTS, type TimerMode } from '@/domain/timer/types';
@@ -14,6 +15,7 @@ import * as haptics from '@/lib/haptics';
 import { useRitualStore } from '@/store/ritualStore';
 import { useSoundStore } from '@/store/soundStore';
 import { useSpaceStore } from '@/store/spaceStore';
+import { useTaskStore } from '@/store/taskStore';
 import { useElapsedMs, useRemainingMs, useTimerStore } from '@/store/timerStore';
 import { defaultSceneId, scenePalettes } from '@/theme/scenePalettes';
 import { resolveSpacePalette } from '@/theme/spacePalette';
@@ -35,6 +37,15 @@ async function resolveRitual(id: string): Promise<Ritual | null> {
   if (cached) return cached;
   const db = await getDatabase();
   return getRitualById(db, id);
+}
+
+/** Cache-first (taskStore), falling back to a direct DB read if the store hasn't loaded yet. */
+async function resolveTaskTitle(id: string): Promise<string | null> {
+  const cached = useTaskStore.getState().tasks.find((t) => t.id === id);
+  if (cached) return cached.title;
+  const db = await getDatabase();
+  const task = await getTaskById(db, id);
+  return task?.title ?? null;
 }
 
 export function FocusScreen() {
@@ -76,7 +87,7 @@ export function FocusScreen() {
   // Started from a ritual (RitualCard's "Start" button navigates here with this param).
   // Only responsible for creating the session — applying the ritual's scene/sound mix is
   // handled below by the session.ritualId effect, so it also covers cold-start recovery.
-  const { startRitualId } = useLocalSearchParams<{ startRitualId?: string }>();
+  const { startRitualId, startTaskId } = useLocalSearchParams<{ startRitualId?: string; startTaskId?: string }>();
   const startedRitualIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -100,6 +111,62 @@ export function FocusScreen() {
       cancelled = true;
     };
   }, [startRitualId, start]);
+
+  // Started from a Today task (TaskCard's "Start" button). No ritual involved — starts
+  // with whatever mode is currently selected on this screen, just tagged with taskId so
+  // it shows up associated with the task in History later.
+  const startedTaskIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!startTaskId || startedTaskIdRef.current === startTaskId) return;
+    startedTaskIdRef.current = startTaskId;
+
+    let cancelled = false;
+    resolveTaskTitle(startTaskId)
+      .then((title) => {
+        if (title == null || cancelled) return;
+        haptics.tap();
+        start(mode, { taskId: startTaskId });
+      })
+      .catch((error: unknown) => {
+        console.error('[FocusScreen] failed to start from task', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [startTaskId, start, mode]);
+
+  // Reflects whichever task the *current session* is tied to — shows its title near the
+  // timer while running, and (like the ritual effect below) also covers cold-start
+  // recovery of a task-tied session.
+  const sessionTaskId = session?.taskId ?? null;
+  const [activeTaskTitle, setActiveTaskTitle] = useState<string | null>(null);
+  const appliedTaskIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionTaskId) {
+      appliedTaskIdRef.current = null;
+      setActiveTaskTitle(null);
+      return;
+    }
+    if (appliedTaskIdRef.current === sessionTaskId) return;
+    appliedTaskIdRef.current = sessionTaskId;
+
+    let cancelled = false;
+    resolveTaskTitle(sessionTaskId)
+      .then((title) => {
+        if (cancelled) return;
+        setActiveTaskTitle(title);
+      })
+      .catch((error: unknown) => {
+        console.error('[FocusScreen] failed to resolve active task', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionTaskId]);
 
   // Reflects whichever ritual the *current session* is tied to — fires both right after
   // the effect above creates a session, and when a running/paused session recovers from a
@@ -223,6 +290,17 @@ export function FocusScreen() {
             backgroundColor={palette.surface}
           />
         </View>
+
+        {activeTaskTitle && (
+          <Text
+            variant="body"
+            color={palette.textMuted}
+            style={{ textAlign: 'center', paddingTop: theme.spacing.xs }}
+            numberOfLines={1}
+          >
+            {activeTaskTitle}
+          </Text>
+        )}
 
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: theme.spacing.xl }}>
           {!isSessionActive && (
