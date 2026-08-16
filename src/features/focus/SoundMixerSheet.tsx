@@ -6,13 +6,13 @@ import { Text } from '@/components/Text';
 import { VolumeBar } from '@/components/VolumeBar';
 import { soundLibrary } from '@/lib/audio/soundLibrary';
 import { useSoundStore } from '@/store/soundStore';
-import type { ScenePalette } from '@/theme/scenePalettes';
+import type { PaletteColors } from '@/theme/scenePalettes';
 import { useTheme } from '@/theme/ThemeProvider';
 
 export interface SoundMixerSheetProps {
   visible: boolean;
   onClose: () => void;
-  palette: ScenePalette;
+  palette: PaletteColors;
 }
 
 export function SoundMixerSheet({ visible, onClose, palette }: SoundMixerSheetProps) {

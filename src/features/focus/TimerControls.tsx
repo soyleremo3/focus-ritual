@@ -5,11 +5,11 @@ import { IconButton } from '@/components/IconButton';
 import { Text } from '@/components/Text';
 import type { TimerSession } from '@/domain/timer/types';
 import { useTheme } from '@/theme/ThemeProvider';
-import type { ScenePalette } from '@/theme/scenePalettes';
+import type { PaletteColors } from '@/theme/scenePalettes';
 
 export interface TimerControlsProps {
   session: TimerSession | null;
-  palette: ScenePalette;
+  palette: PaletteColors;
   onStart: () => void;
   onPause: () => void;
   onResume: () => void;
