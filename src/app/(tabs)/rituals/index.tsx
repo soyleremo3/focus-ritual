@@ -1,14 +1,5 @@
-import { EmptyState } from '@/components/EmptyState';
-import { Screen } from '@/components/Screen';
+import { RitualsListScreen } from '@/features/rituals/RitualsListScreen';
 
-export default function RitualsScreen() {
-  return (
-    <Screen>
-      <EmptyState
-        icon="repeat"
-        title="Rituals"
-        message="Reusable Focus Ritual presets — timer mode, space, and sound mix saved together — are coming in a future phase."
-      />
-    </Screen>
-  );
+export default function RitualsTab() {
+  return <RitualsListScreen />;
 }
