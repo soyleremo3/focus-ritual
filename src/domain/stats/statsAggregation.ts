@@ -12,15 +12,25 @@ function totalFocusMsOf(session: TimerSession): number {
   return computeTotalFocusMs(session, session.createdAt);
 }
 
+/**
+ * Cancelled sessions stay visible in History (see HistoryScreen's session list) but are
+ * excluded from every productivity aggregate below — a session abandoned after 30 seconds
+ * shouldn't count the same as one seen through to completion or ended deliberately via finish().
+ */
+function isProductive(session: TimerSession): boolean {
+  return session.status !== 'cancelled';
+}
+
 export interface StatsSummary {
   totalFocusMs: number;
   sessionCount: number;
 }
 
 export function summarize(sessions: TimerSession[]): StatsSummary {
+  const productive = sessions.filter(isProductive);
   return {
-    totalFocusMs: sessions.reduce((sum, s) => sum + totalFocusMsOf(s), 0),
-    sessionCount: sessions.length,
+    totalFocusMs: productive.reduce((sum, s) => sum + totalFocusMsOf(s), 0),
+    sessionCount: productive.length,
   };
 }
 
@@ -85,7 +95,7 @@ export interface BreakdownEntry {
 /** Sorted by totalFocusMs descending; ties keep their original relative order (stable sort). */
 function groupBy(sessions: TimerSession[], keyFn: (s: TimerSession) => string | null): BreakdownEntry[] {
   const totals = new Map<string | null, { totalFocusMs: number; sessionCount: number }>();
-  for (const s of sessions) {
+  for (const s of sessions.filter(isProductive)) {
     const key = keyFn(s);
     const entry = totals.get(key) ?? { totalFocusMs: 0, sessionCount: 0 };
     entry.totalFocusMs += totalFocusMsOf(s);
@@ -130,7 +140,7 @@ function segmentForHour(hour: number): TimeOfDaySegment {
 /** Which broad time-of-day segment has the most accumulated focus time; null if there's no focus time at all. */
 export function bestFocusSegment(sessions: TimerSession[]): TimeOfDaySegment | null {
   const totals: Record<TimeOfDaySegment, number> = { morning: 0, afternoon: 0, evening: 0, night: 0 };
-  for (const s of sessions) {
+  for (const s of sessions.filter(isProductive)) {
     totals[segmentForHour(new Date(s.createdAt).getHours())] += totalFocusMsOf(s);
   }
 
@@ -156,7 +166,7 @@ export const WEEKDAY_SHORT_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', '
 /** Always 7 entries, ordered starting from weekStartsOn — which days of the week the user tends to focus on. */
 export function weeklyRhythm(sessions: TimerSession[], weekStartsOn: 0 | 1 = 0): WeekdayTotal[] {
   const totals = [0, 0, 0, 0, 0, 0, 0];
-  for (const s of sessions) {
+  for (const s of sessions.filter(isProductive)) {
     const day = new Date(s.createdAt).getDay();
     totals[day] = (totals[day] ?? 0) + totalFocusMsOf(s);
   }

@@ -56,6 +56,19 @@ describe('summarize', () => {
     ];
     expect(summarize(sessions)).toEqual({ totalFocusMs: 35 * 60_000, sessionCount: 2 });
   });
+
+  test('excludes cancelled sessions from totals and session count', () => {
+    const sessions = [
+      makeSession({ totalFocusMs: 10 * 60_000, createdAt: 0, status: 'completed' }),
+      makeSession({ totalFocusMs: 999 * 60_000, createdAt: 0, status: 'cancelled' }),
+    ];
+    expect(summarize(sessions)).toEqual({ totalFocusMs: 10 * 60_000, sessionCount: 1 });
+  });
+
+  test('sessions ended via finish() (status completed) count normally', () => {
+    const sessions = [makeSession({ totalFocusMs: 20 * 60_000, createdAt: 0, status: 'completed' })];
+    expect(summarize(sessions)).toEqual({ totalFocusMs: 20 * 60_000, sessionCount: 1 });
+  });
 });
 
 describe('filterSessionsInRange', () => {
@@ -119,6 +132,18 @@ describe('last7DaysBuckets', () => {
     expect(yesterdayBucket?.totalFocusMs).toBe(20 * 60_000);
     expect(buckets.reduce((sum, b) => sum + b.totalFocusMs, 0)).toBe(50 * 60_000); // the 999m session excluded
   });
+
+  test('excludes cancelled sessions from bucket totals and counts', () => {
+    const today = localTime(2024, 5, 15, 10, 0);
+    const sessions = [
+      makeSession({ totalFocusMs: 30 * 60_000, createdAt: localTime(2024, 5, 15, 8, 0), status: 'completed' }),
+      makeSession({ totalFocusMs: 999 * 60_000, createdAt: localTime(2024, 5, 15, 9, 0), status: 'cancelled' }),
+    ];
+    const buckets = last7DaysBuckets(sessions, today);
+    const todayBucket = buckets.find((b) => b.dateMs === startOfDay(localTime(2024, 5, 15)));
+    expect(todayBucket?.totalFocusMs).toBe(30 * 60_000);
+    expect(todayBucket?.sessionCount).toBe(1);
+  });
 });
 
 describe('groupByRitual / groupByTask', () => {
@@ -139,6 +164,15 @@ describe('groupByRitual / groupByTask', () => {
     const sessions = [makeSession({ totalFocusMs: 10 * 60_000, createdAt: 0 })];
     expect(groupByRitual(sessions)).toEqual([{ key: null, totalFocusMs: 10 * 60_000, sessionCount: 1 }]);
     expect(groupByTask(sessions)).toEqual([{ key: null, totalFocusMs: 10 * 60_000, sessionCount: 1 }]);
+  });
+
+  test('excludes cancelled sessions from ritual/task breakdowns', () => {
+    const sessions = [
+      makeSession({ totalFocusMs: 10 * 60_000, createdAt: 0, ritualId: 'r1', taskId: 't1', status: 'completed' }),
+      makeSession({ totalFocusMs: 999 * 60_000, createdAt: 0, ritualId: 'r1', taskId: 't1', status: 'cancelled' }),
+    ];
+    expect(groupByRitual(sessions)).toEqual([{ key: 'r1', totalFocusMs: 10 * 60_000, sessionCount: 1 }]);
+    expect(groupByTask(sessions)).toEqual([{ key: 't1', totalFocusMs: 10 * 60_000, sessionCount: 1 }]);
   });
 });
 
@@ -166,6 +200,14 @@ describe('favoriteRitualId', () => {
   test('returns null for an empty session list', () => {
     expect(favoriteRitualId([])).toBeNull();
   });
+
+  test('ignores cancelled sessions even if they would otherwise win', () => {
+    const sessions = [
+      makeSession({ totalFocusMs: 999 * 60_000, createdAt: 0, ritualId: 'r1', status: 'cancelled' }),
+      makeSession({ totalFocusMs: 5 * 60_000, createdAt: 0, ritualId: 'r2', status: 'completed' }),
+    ];
+    expect(favoriteRitualId(sessions)).toBe('r2');
+  });
 });
 
 describe('bestFocusSegment', () => {
@@ -179,6 +221,14 @@ describe('bestFocusSegment', () => {
 
   test('returns null when there is no focus time at all', () => {
     expect(bestFocusSegment([])).toBeNull();
+  });
+
+  test('excludes cancelled sessions from the segment totals', () => {
+    const sessions = [
+      makeSession({ totalFocusMs: 999 * 60_000, createdAt: localTime(2024, 0, 1, 9, 0), status: 'cancelled' }), // morning
+      makeSession({ totalFocusMs: 10 * 60_000, createdAt: localTime(2024, 0, 2, 22, 0), status: 'completed' }), // night
+    ];
+    expect(bestFocusSegment(sessions)).toBe('night');
   });
 });
 
@@ -200,6 +250,16 @@ describe('weeklyRhythm', () => {
     const rhythm = weeklyRhythm(sessions, 1);
     const monday = rhythm.find((d) => d.dayOfWeek === 1);
     expect(monday?.totalFocusMs).toBe(35 * 60_000);
+  });
+
+  test('excludes cancelled sessions from the weekly rhythm', () => {
+    // Jan 1 2024 is a Monday.
+    const sessions = [
+      makeSession({ totalFocusMs: 20 * 60_000, createdAt: localTime(2024, 0, 1), status: 'completed' }),
+      makeSession({ totalFocusMs: 999 * 60_000, createdAt: localTime(2024, 0, 1), status: 'cancelled' }),
+    ];
+    const monday = weeklyRhythm(sessions, 1).find((d) => d.dayOfWeek === 1);
+    expect(monday?.totalFocusMs).toBe(20 * 60_000);
   });
 });
 
