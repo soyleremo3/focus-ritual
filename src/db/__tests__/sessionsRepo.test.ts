@@ -1,6 +1,6 @@
-import { createSession, pause, reconcile } from '@/domain/timer/timerEngine';
+import { cancel, createSession, finish, pause, reconcile } from '@/domain/timer/timerEngine';
 
-import { getActiveSession, getSessionById, upsertSession } from '../repositories/sessionsRepo';
+import { getActiveSession, getSessionById, listTerminalSessions, upsertSession } from '../repositories/sessionsRepo';
 import { migrate } from '../schema';
 import { createTestDatabase } from './testDatabase';
 
@@ -101,5 +101,66 @@ describe('sessionsRepo', () => {
 
     expect(reconciled.status).toBe('paused');
     expect(reconciled.accumulatedMs).toBe(12 * MIN);
+  });
+
+  it('round-trips taskId and bankedFocusMs', async () => {
+    const db = createTestDatabase();
+    await migrate(db);
+    await db.runAsync('INSERT INTO tasks (id, title, created_at) VALUES (?, ?, ?)', ['task-1', 'Write report', T0]);
+
+    const session = createSession({ id: 's1', mode: 'pomodoro', now: T0, taskId: 'task-1' });
+    const onBreak = reconcile(session, T0 + 25 * MIN + 30_000);
+    await upsertSession(db, onBreak, T0 + 25 * MIN + 30_000);
+
+    const fetched = await getSessionById(db, 's1');
+    expect(fetched?.taskId).toBe('task-1');
+    expect(fetched?.bankedFocusMs).toBe(25 * MIN);
+  });
+
+  describe('listTerminalSessions', () => {
+    it('excludes running/paused/awaiting-start sessions', async () => {
+      const db = createTestDatabase();
+      await migrate(db);
+
+      const running = createSession({ id: 'running', mode: 'pomodoro', now: T0 });
+      await upsertSession(db, running, T0);
+      const paused = pause(createSession({ id: 'paused', mode: 'pomodoro', now: T0 }), T0 + MIN);
+      await upsertSession(db, paused, T0 + MIN);
+
+      expect(await listTerminalSessions(db)).toEqual([]);
+    });
+
+    it('includes completed and cancelled sessions, newest first', async () => {
+      const db = createTestDatabase();
+      await migrate(db);
+
+      const older = finish(createSession({ id: 'older', mode: 'deepWork', now: T0 }), T0 + 10 * MIN);
+      await upsertSession(db, older, T0 + 10 * MIN);
+
+      const newer = cancel(createSession({ id: 'newer', mode: 'pomodoro', now: T0 + MIN }), T0 + 2 * MIN);
+      await upsertSession(db, newer, T0 + 2 * MIN);
+
+      const result = await listTerminalSessions(db);
+      expect(result.map((s) => s.id)).toEqual(['newer', 'older']);
+      expect(result.map((s) => s.status)).toEqual(['cancelled', 'completed']);
+    });
+
+    it('never double-records a session repeatedly upserted across its lifecycle', async () => {
+      const db = createTestDatabase();
+      await migrate(db);
+
+      const session = createSession({ id: 's1', mode: 'deepWork', now: T0 });
+      await upsertSession(db, session, T0); // created (running)
+      const paused = pause(session, T0 + 5 * MIN);
+      await upsertSession(db, paused, T0 + 5 * MIN); // paused
+      const resumed = { ...paused, status: 'running' as const, startedAt: T0 + 10 * MIN };
+      await upsertSession(db, resumed, T0 + 10 * MIN); // resumed
+      const finished = finish(resumed, T0 + 20 * MIN);
+      await upsertSession(db, finished, T0 + 20 * MIN); // finished — 4th upsert, same id throughout
+
+      const result = await listTerminalSessions(db);
+      expect(result).toHaveLength(1);
+      expect(result[0]?.status).toBe('completed');
+    });
   });
 });

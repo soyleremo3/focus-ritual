@@ -113,6 +113,16 @@ export const MIGRATIONS: Migration[] = [
       `ALTER TABLE settings ADD COLUMN master_volume REAL NOT NULL DEFAULT 1`,
     ],
   },
+  {
+    version: 4,
+    statements: [
+      // Today Tasks & History (Phase 6): total focus-phase ms banked from every closed-out
+      // phase segment of a session — see domain/timer/timerEngine.ts's bankedFocusMs.
+      // Without this, a multi-cycle session's total focus time couldn't be reconstructed
+      // from a persisted row, since accumulated_ms only ever reflects the current phase.
+      `ALTER TABLE sessions ADD COLUMN banked_focus_ms INTEGER NOT NULL DEFAULT 0`,
+    ],
+  },
 ];
 
 interface UserVersionRow {
