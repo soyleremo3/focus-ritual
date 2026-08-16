@@ -93,6 +93,40 @@ describe('reconcile — multiple elapsed phase boundaries', () => {
     const twice = reconcile(once, now);
     expect(twice).toEqual(once);
   });
+
+  it('reconciling an already-halted session again is a true no-op, not just equal by luck', () => {
+    // Regression: a session rehydrated from persistence may already be awaiting-start —
+    // reconcile() must not re-run its boundary-crossing logic against it.
+    const session = createSession({ id: 's1', mode: 'pomodoro', now: T0 });
+    const halted = reconcile(session, T0 + 25 * MIN + 5 * MIN + MIN);
+    expect(halted.status).toBe('awaiting-start');
+
+    const reconciledAgain = reconcile(halted, T0 + 999 * MIN); // much later `now`, still a no-op
+    expect(reconciledAgain).toBe(halted); // same reference — short-circuited, not rebuilt
+  });
+
+  it('does not double-count cyclesCompleted when reconciled twice after halting on a focus boundary', () => {
+    // Flow is the one mode that halts on a *focus* completion — cyclesCompleted correctly
+    // increments to 1 the moment that focus block finishes (whether or not a break
+    // follows). This is the shape that exposed the bug: the halt branch previously didn't
+    // guard against re-entering the loop, so a second reconcile() re-incremented it to 2.
+    const session = createSession({ id: 's1', mode: 'flow', now: T0 });
+    const halted = reconcile(session, T0 + 45 * MIN + 10_000);
+    expect(halted.cyclesCompleted).toBe(1);
+
+    const reconciledAgain = reconcile(halted, T0 + 45 * MIN + 10_000);
+    expect(reconciledAgain.cyclesCompleted).toBe(1);
+    expect(reconciledAgain).toEqual(halted);
+  });
+
+  it('is a no-op for paused, completed, and cancelled sessions regardless of elapsed time', () => {
+    const running = createSession({ id: 's1', mode: 'pomodoro', now: T0 });
+    const paused = pause(running, T0 + MIN);
+    expect(reconcile(paused, T0 + 999 * MIN)).toBe(paused);
+
+    const cancelled = cancel(running, T0 + MIN);
+    expect(reconcile(cancelled, T0 + 999 * MIN)).toBe(cancelled);
+  });
 });
 
 describe('reconcile — Flow Mode', () => {

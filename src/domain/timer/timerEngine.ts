@@ -111,6 +111,13 @@ export function cancel(session: TimerSession, now: number): TimerSession {
  * session completes (cyclesTarget reached).
  */
 export function reconcile(session: TimerSession, now: number): TimerSession {
+  // Only a running session accrues wall-clock time to reconcile. A session that already
+  // halted (awaiting-start), or is paused/completed/cancelled, has nothing further to
+  // fast-forward — without this guard, calling reconcile() twice on an already-halted
+  // session (the exact shape a persisted session is rehydrated in) would re-run the loop
+  // body once more and double-count a phase completion.
+  if (session.status !== 'running') return session;
+
   let current = session;
 
   while (isPhaseComplete(current, now)) {
