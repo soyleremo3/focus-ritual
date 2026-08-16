@@ -103,6 +103,16 @@ export const MIGRATIONS: Migration[] = [
       `ALTER TABLE settings ADD COLUMN active_space_id TEXT REFERENCES spaces(id) ON DELETE SET NULL`,
     ],
   },
+  {
+    version: 3,
+    statements: [
+      // Sound mixer polish (Phase 5): the user's standalone ambient mix and master volume,
+      // so they persist across app restarts independently of any ritual — same pattern as
+      // active_space_id above. active_sound_mix is a JSON-encoded [{soundId, volume}, ...].
+      `ALTER TABLE settings ADD COLUMN active_sound_mix TEXT`,
+      `ALTER TABLE settings ADD COLUMN master_volume REAL NOT NULL DEFAULT 1`,
+    ],
+  },
 ];
 
 interface UserVersionRow {
