@@ -14,6 +14,8 @@ interface SoundStoreState {
   masterPlaying: boolean;
   toggleLayer: (soundId: string) => void;
   setLayerVolume: (soundId: string, volume: number) => void;
+  /** Replaces the whole mix at once — used when starting a session from a saved ritual. */
+  setMix: (layers: ActiveLayer[]) => void;
   play: () => void;
   pause: () => void;
 }
@@ -42,6 +44,11 @@ export const useSoundStore = create<SoundStoreState>()((set, get) => ({
     const nextMix = get().activeMix.map((layer) => (layer.soundId === soundId ? { ...layer, volume } : layer));
     set({ activeMix: nextMix });
     soundEngine.setLayerVolume(soundId, volume);
+  },
+
+  setMix: (layers) => {
+    set({ activeMix: layers });
+    soundEngine.setMix(layers);
   },
 
   play: () => {
