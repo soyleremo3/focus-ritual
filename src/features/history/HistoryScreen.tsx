@@ -27,6 +27,7 @@ import {
 } from '@/domain/stats/statsAggregation';
 import type { TimerSession } from '@/domain/timer/types';
 import { useRitualStore } from '@/store/ritualStore';
+import { useSettingsStore } from '@/store/settingsStore';
 import { useTheme } from '@/theme/ThemeProvider';
 
 import { Bar } from './Bar';
@@ -55,6 +56,7 @@ async function resolveTaskTitle(id: string): Promise<string> {
 
 export function HistoryScreen() {
   const theme = useTheme();
+  const weekStartsOn = useSettingsStore((s) => s.settings.weekStartsOn);
   const [sessions, setSessions] = useState<TimerSession[] | null>(null);
   const [ritualNames, setRitualNames] = useState<Record<string, string>>({});
   const [taskTitles, setTaskTitles] = useState<Record<string, string>>({});
@@ -115,13 +117,13 @@ export function HistoryScreen() {
 
   const now = Date.now();
   const today = summarize(filterSessionsInRange(sessions, startOfDay(now), now + 1));
-  const week = summarize(filterSessionsInRange(sessions, startOfWeek(now), now + 1));
+  const week = summarize(filterSessionsInRange(sessions, startOfWeek(now, weekStartsOn), now + 1));
   const month = summarize(filterSessionsInRange(sessions, startOfMonth(now), now + 1));
 
   const dailyBars = last7DaysBuckets(sessions, now);
   const maxDailyMs = Math.max(...dailyBars.map((b) => b.totalFocusMs), 1);
 
-  const rhythm = weeklyRhythm(sessions);
+  const rhythm = weeklyRhythm(sessions, weekStartsOn);
   const maxRhythmMs = Math.max(...rhythm.map((d) => d.totalFocusMs), 1);
 
   const ritualBreakdown = groupByRitual(sessions)

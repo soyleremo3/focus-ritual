@@ -1,6 +1,8 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
 
+import { useSettingsStore } from '@/store/settingsStore';
+
 import { durations, easing, springConfig } from './motion';
 import { defaultSceneId, scenePalettes, type SceneId, type ScenePalette } from './scenePalettes';
 import { fontSize, fontWeight, lineHeight, radius, spacing, tracking } from './tokens';
@@ -61,7 +63,15 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const systemScheme = useColorScheme();
-  const colorScheme: 'light' | 'dark' = systemScheme === 'dark' ? 'dark' : 'light';
+  const themeModePreference = useSettingsStore((s) => s.settings.themeMode);
+  const colorScheme: 'light' | 'dark' =
+    themeModePreference === 'light'
+      ? 'light'
+      : themeModePreference === 'dark'
+        ? 'dark'
+        : systemScheme === 'dark'
+          ? 'dark'
+          : 'light';
   const neutral = colorScheme === 'dark' ? darkNeutral : lightNeutral;
 
   const value = useMemo<ThemeContextValue>(
