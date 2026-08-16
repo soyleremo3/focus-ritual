@@ -1,5 +1,5 @@
 import { listSounds } from '../repositories/soundsRepo';
-import { listSpaces } from '../repositories/spacesRepo';
+import { getSpaceById, listSpaces } from '../repositories/spacesRepo';
 import { seedBundledData } from '../seed';
 import { migrate } from '../schema';
 import { createTestDatabase } from './testDatabase';
@@ -37,9 +37,10 @@ describe('seedBundledData', () => {
     expect(spaces.every((s) => s.created_at === T0)).toBe(true);
   });
 
-  it('does not clobber a row a later phase has already modified', async () => {
-    // Once Phase 4 lets a user archive/rename a bundled space, re-seeding on the next
-    // app start must not silently reset it back to defaults.
+  it('does not clobber a row already modified, even though the app never lets a user edit a bundled space', async () => {
+    // Bundled spaces are immutable through the app's own repository functions (see
+    // spacesRepo's updateCustomSpace/archiveCustomSpace guards), but seedBundledData's
+    // INSERT OR IGNORE must still be safe regardless of how a row got modified.
     const db = createTestDatabase();
     await migrate(db);
     await seedBundledData(db, T0);
@@ -47,8 +48,9 @@ describe('seedBundledData', () => {
     await db.runAsync("UPDATE spaces SET name = 'My Renamed Study', is_archived = 1 WHERE id = 'amber-study'", []);
     await seedBundledData(db, T0 + 1000);
 
-    const spaces = await listSpaces(db);
-    const amberStudy = spaces.find((s) => s.id === 'amber-study');
+    // listSpaces is active-only (matches listRituals) — the now-archived row correctly
+    // drops out of it. Read it back directly to confirm re-seeding didn't touch it.
+    const amberStudy = await getSpaceById(db, 'amber-study');
     expect(amberStudy?.name).toBe('My Renamed Study');
     expect(amberStudy?.is_archived).toBe(1);
   });
