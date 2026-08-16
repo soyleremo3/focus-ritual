@@ -7,8 +7,14 @@
     "icon": "./assets/images/icon.png",
     "scheme": "focusritual",
     "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -32,11 +38,21 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      "expo-sqlite",
+      "expo-audio",
+      "expo-notifications",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "FocusRitual uses your photos to let you set a custom wallpaper for a Focus Space."
+        }
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,
-      "reactCompiler": true
+      "reactCompiler": false
     }
   }
 }
