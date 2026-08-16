@@ -110,6 +110,18 @@ export function FocusScreen() {
       })
       .catch((error: unknown) => {
         console.error('[FocusScreen] failed to start from ritual', error);
+      })
+      .finally(() => {
+        // Reset both guards once handled: the ref (so the *next* time this effect runs
+        // for this same ritual id, it doesn't immediately bail on a stale match) and the
+        // param (so tapping "Start" on the same ritual again is a genuine value
+        // transition undefined -> ritualId that actually re-runs the effect in the first
+        // place — this tab screen never unmounts between visits, and React's effect
+        // dependency check ignores an unchanged string). Clearing only one of the two
+        // leaves the button dead: clear the param alone and the stale ref still bails;
+        // clear the ref alone and the unchanged param never re-triggers the effect.
+        startedRitualIdRef.current = null;
+        router.setParams({ startRitualId: undefined });
       });
 
     return () => {
@@ -135,6 +147,11 @@ export function FocusScreen() {
       })
       .catch((error: unknown) => {
         console.error('[FocusScreen] failed to start from task', error);
+      })
+      .finally(() => {
+        // Same reasoning as the ritual effect above — reset both the ref and the param.
+        startedTaskIdRef.current = null;
+        router.setParams({ startTaskId: undefined });
       });
 
     return () => {
