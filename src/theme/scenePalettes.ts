@@ -2,11 +2,9 @@ import { isDark } from '@/domain/palette/paletteContrast';
 
 export type SceneId = 'amber-study' | 'rain-window' | 'midnight-forest';
 
-export interface ScenePalette {
-  id: SceneId;
-  name: string;
-  description: string;
-  /** Base scene color — SceneBackdrop renders this as a drawn gradient, no photo asset. */
+/** The color set every backdrop (bundled gradient or custom photo) is themed against. */
+export interface PaletteColors {
+  /** Base scene color — SceneBackdrop renders this as a drawn gradient for bundled scenes. */
   background: string;
   backgroundSecondary: string;
   scrimTop: string;
@@ -17,6 +15,12 @@ export interface ScenePalette {
   accent: string;
   onAccent: string;
   isDark: boolean;
+}
+
+export interface ScenePalette extends PaletteColors {
+  id: SceneId;
+  name: string;
+  description: string;
 }
 
 type SceneDraft = Omit<ScenePalette, 'isDark'>;
