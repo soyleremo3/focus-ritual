@@ -8,6 +8,69 @@ semantic versioning until a `1.0.0` release.
 
 ## [Unreleased]
 
+### Phase 8 — Final Hardening & Production Polish
+
+No new product features — a strict audit-and-fix pass across every existing flow. See
+[Phase 8 completion status](README.md#phase-8-completion-status) for exactly what's
+verified locally vs. explicitly blocked on a physical device.
+
+#### Fixed
+
+- `timerEngine.cancel()` had no status guard (unlike `finish()`) — could double-transition
+  an already-`'completed'`/`'cancelled'` session. `reconcile()` now self-heals a corrupted
+  `status:'running'`, `startedAt:null` session (previously an infinite freeze) by treating
+  it as freshly resumed from now, never fabricating elapsed time.
+- `db/schema.ts` wrote each migration's `PRAGMA user_version` in a separate `execAsync`
+  call *after* its transaction committed — killing the app in that gap replayed the same
+  migration on next launch. Now written inside the same transaction.
+- `timerStore.start()`/`hydrate()` had two races that could leave a zombie orphaned
+  session row in the database (starting a new session while an old one was still active;
+  hydrating over an already-in-memory session).
+- `soundStore.hydrate()` could race a mutation and silently discard it; `setLayerVolume`
+  could resurrect a player that was already mid-fade-out-and-removal.
+- `settingsStore.update()`/`timerStore.syncNotification()` had unguarded async races
+  (a slow update landing after a newer one); `db/client.ts`'s `getDatabase()` permanently
+  cached a rejected promise, bricking every future DB call after a single failure.
+- `FocusScreen`'s restart-the-same-ritual/same-task button silently did nothing on a
+  second tap — the route param reset correctly, but a stale ref guarding against
+  re-triggering the start effect was never cleared alongside it.
+- A nested-`<button>` HTML hydration bug on web: `RitualCard`/`SpaceCard`'s outer
+  `Pressable` had `accessibilityRole="button"` while already containing inner
+  `IconButton`/`MiniButton` controls that render as real `<button>` elements via RN Web —
+  invalid HTML, broke hydration. Role removed from the outer wrappers; the label stays.
+- WCAG AA contrast failures: `lightNeutral`/mood-`light`'s `accent` read 4.01:1 against
+  `onAccent` (under the 4.5:1 text minimum) — darkened to 4.60:1. Both neutral palettes'
+  `border` read ~1.2–1.4:1 against their background/surface (under the 3:1 UI-component
+  minimum) — light darkened, dark lightened, both now ≥3:1. Regression-tested against
+  every shipped palette.
+- `Text variant="label"` bakes in `textTransform: 'uppercase'` — was being used to render
+  arbitrary user content (a custom Focus Space's name in `SpaceCard`, the Focus screen's
+  own space-name header, a ritual/task name + date in `HistoryScreen`'s session list, and
+  a Focus Space name in the ritual editor's `Chip`-based picker), mangling it (e.g. "Amber
+  Study" → "AMBER STUDY"). Added a non-uppercase `caption` Text variant and a `Chip`
+  `uppercase` opt-out for the one user-content chip; every other (intentionally
+  uppercase, app-defined) label/chip usage is unaffected.
+- No top-level crash guard existed anywhere — any render-time error white-screened the
+  app permanently. Added `ErrorBoundary` wrapping the root `Stack`, above `ThemeProvider`
+  so it can also catch a crash in `ThemeProvider` itself; recovers via a "Try Again" that
+  resets local state and re-renders.
+- `ritualStore`/`taskStore`/`spaceStore.refresh()` had no failure handling — a DB read
+  error left `loaded: false` forever, which left `RitualsListScreen`/`TodayScreen`
+  rendering a silently blank list (their empty-state check is gated on `loaded`) and
+  `SpacesGalleryScreen` had no loading/error state at all. `HistoryScreen.load()` caught
+  the error but only logged it, leaving the screen stuck on "Loading…" forever. All four
+  now surface a retryable error via `EmptyState`'s new `onRetry` action.
+
+#### Added
+
+- Accessibility labels/roles/states across every interactive control app-wide
+  (`Toggle`, `VolumeBar`, `IconButton` call sites, `RitualCard`, `SpaceCard`, `TaskCard`,
+  `SoundMixEditor`, `SoundMixerSheet`, editor close/back buttons); `VolumeBar` gained
+  adjustable increment/decrement accessibility actions and a larger `hitSlop`.
+- Regression tests for every fix above (`timerEngine`, `schema`, `theme/contrast`,
+  `components/Text`, `components/ErrorBoundary`, `store/errorState`), plus the pre-existing
+  suite — 214 tests total, all passing.
+
 ### Phase 7 — Notifications, Haptics Polish & Settings
 
 #### Added

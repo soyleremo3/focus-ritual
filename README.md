@@ -544,9 +544,29 @@ open the whole time froze at 00:00 instead of completing (see
 [Timer engine](#timer-engine) above). See
 [Notifications & Settings](#notifications--settings) above.
 
-**Phase 8 — Hardening.** AppState/lock edge cases, Android sustained-background-audio
-verification, accessibility (dynamic type, contrast against arbitrary user photos),
-performance pass.
+**Phase 8 — Final hardening & production polish.** ✅ No new features — an audit-and-fix
+pass across every existing flow. Ten real bugs found and fixed, each with a regression
+test: a `cancel()`/`finish()` race that could double-transition a completed session; a
+corrupted `status:'running'`/`startedAt:null` session that froze `reconcile()` forever
+(self-heals now); a migration crash-on-kill (the `PRAGMA user_version` write now shares
+the same transaction as its migration statements, not a separate call after commit); two
+`timerStore.start()`/`hydrate()` races that could leave a zombie orphaned session row;
+`soundStore.hydrate()` racing a mutation and losing it, plus `setLayerVolume` resurrecting
+an already-fading-out player; `settingsStore`/`timerStore` notification races; a single
+DB-open failure permanently bricking `getDatabase()` (now retries); a dead
+restart-the-same-ritual/task button on the Focus screen (a stale ref, not just a stale
+route param, needed resetting); and a nested-`<button>` HTML hydration bug on web from an
+outer card and its inner icon button both claiming `accessibilityRole="button"`.
+Accessibility labels/roles/states added across every interactive control, plus adjustable
+increment/decrement actions on `VolumeBar`; WCAG AA contrast failures fixed in the neutral
+and mood-light palettes (regression-tested against every shipped palette); several spots
+where `Text variant="label"`'s uppercase transform was mangling user-typed content (space
+names, ritual/task names in History) fixed with a new non-uppercase `caption` variant;
+a top-level `ErrorBoundary` added (none existed — a render crash white-screened the app
+permanently) plus retryable error states on every screen whose `refresh()`/`load()` had no
+failure path (previously: `loaded` stuck at `false` forever, or a `HistoryScreen` stuck on
+"Loading…" forever). See [Verification](#verification) below for what's covered by the
+test suite vs. what still needs a physical device.
 
 ## Verification
 
@@ -623,3 +643,60 @@ Before Phase 8 begins, all of the following must pass:
      that can't be meaningfully exercised through the web preview, since `imagePicker.ts`
      takes a different (untested-here) code path on web — see
      [Focus Spaces & custom wallpapers](#focus-spaces--custom-wallpapers) above.
+
+## Phase 8 completion status
+
+Phase 8 (final hardening) is complete for everything verifiable in this development
+environment. There is no physical device or `adb`/EAS tooling available here, so the
+device-dependent checks below are explicitly **BLOCKED**, not silently skipped or assumed
+passing — the ten fixes and their regression tests above are unaffected by this; the
+blocked items are re-verifications of *existing* (pre-Phase-8) behavior that only a real
+device can meaningfully exercise.
+
+**Passed, verified in this environment:**
+
+- `npm run typecheck`, `npm run lint`, `npx expo-doctor` — all clean.
+- `npm test` — 214 tests pass, including new coverage added this phase: `timerEngine`'s
+  `cancel()` guard and corrupted-session self-heal, `schema`'s same-transaction PRAGMA
+  write, `theme/__tests__/contrast.test.ts` (every shipped neutral/scene/mood palette
+  against WCAG AA), `components/__tests__/Text.test.ts` (the `caption` variant),
+  `components/__tests__/ErrorBoundary.test.tsx` (catches, shows fallback, recovers on
+  retry), and `store/__tests__/errorState.test.ts` (`ritualStore`/`taskStore`/
+  `spaceStore.refresh()` surface a retryable error instead of hanging on a rejected
+  `getDatabase()`).
+- Manual sweep in the Expo web preview: Focus start/pause/cancel/finish; ritual creation
+  with the Focus Space picker (post-fix, space names no longer uppercase-mangled); Today
+  task add/complete/delete; Settings toggle-and-persist-across-reload; Rituals/Spaces/
+  History/Settings tabs all render without console errors. The nested-`<button>`
+  hydration bug (RitualCard, SpaceCard) was caught and fixed this way, then re-verified
+  clean on a fresh tab.
+
+**BLOCKED — requires a physical Android device (or an EAS/dev-client build), unavailable
+in this environment:**
+
+- Phase-end notification firing while the app is backgrounded, and rescheduling correctly
+  after pause/resume — the one path the web preview cannot exercise at all (no scheduled-
+  notification API on web).
+- Notification-permission-denied still leaving the app fully functional.
+- Sustained (multi-minute) background/lock-screen ambient audio playback, including
+  sticky lock-screen media-session ownership across a multi-layer mix.
+- Custom Focus Space photo persistence through `expo-image-picker` on a real device
+  (`imagePicker.ts` takes a different, untested-here code path on web).
+- Timer/session cold-start recovery (force-quit and relaunch) on-device — logically
+  covered by `sessionsRepo`/`timerStore` tests and the corrupted-state self-heal test
+  added this phase, but never exercised through an actual OS process kill.
+- Real touch-target/tap-accuracy feel for the accessibility and hitSlop changes made this
+  phase (VolumeBar's adjustable actions, the widened SpaceCard MiniButton gap) — sized and
+  reasoned about, not felt on actual hardware.
+
+To close these out: build a dev client (`npx expo run:android` or an EAS dev build) and
+work through the Phase 7 real-device checklist above plus the additional items listed
+here, on a real Android device.
+
+**Explicitly deferred (minor/low-priority polish, not user-impacting correctness bugs)**:
+gating `SceneBackdrop`'s ambient glow animation on tab focus + reduced-motion support;
+per-tick render-cost memoization on `FocusScreen`/`SceneBackdrop`; memoizing
+`HistoryScreen`'s stats aggregation; two dead SQLite indexes plus two missing ones;
+`VolumeBar`'s per-frame SQLite writes during a drag; `IconButton`'s default hitSlop. None
+of these were reproducible bugs — they're follow-up perf/consistency work, left for a
+future pass rather than bundled into this hardening phase.
