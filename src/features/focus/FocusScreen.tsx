@@ -368,15 +368,11 @@ export function FocusScreen() {
               variant="hero"
               color={palette.text}
               numberOfLines={1}
-              style={
-                // An hour digit ("1:30:00", 7 chars) doesn't fit the ring at the hero size
-                // that "25:00" (5 chars) does — it wrapped to two lines and spilled below
-                // the ring. Drop to the display size for the H:MM:SS case; fontSize/
-                // lineHeight override the hero variant's, fontFamily/tracking stay.
-                clockText.length > 5
-                  ? { fontSize: theme.fontSize.display, lineHeight: theme.fontSize.display * theme.lineHeight.tight }
-                  : undefined
-              }
+              // Always the display size, not the hero variant's default — hero is too big
+              // for an H:MM:SS clock ("1:30:00") to fit the ring on one line, and switching
+              // size by format (small for hours, big otherwise) looked inconsistent between
+              // modes. One fixed size for every format instead.
+              style={{ fontSize: theme.fontSize.display, lineHeight: theme.fontSize.display * theme.lineHeight.tight }}
             >
               {clockText}
             </Text>
