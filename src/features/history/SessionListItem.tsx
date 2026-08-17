@@ -36,7 +36,7 @@ export function SessionListItem({ session, subtitle }: SessionListItemProps) {
             </Text>
           )}
         </View>
-        <Text variant="label" color={theme.neutral.textMuted} numberOfLines={1}>
+        <Text variant="caption" color={theme.neutral.textMuted} numberOfLines={1}>
           {[subtitle, dateLabel].filter(Boolean).join(' · ')}
         </Text>
       </View>

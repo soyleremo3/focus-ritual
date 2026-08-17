@@ -2,7 +2,7 @@ import { Text as RNText, type TextProps as RNTextProps, type TextStyle } from 'r
 
 import { useTheme } from '@/theme/ThemeProvider';
 
-export type TextVariant = 'hero' | 'display' | 'title' | 'body' | 'label';
+export type TextVariant = 'hero' | 'display' | 'title' | 'body' | 'label' | 'caption';
 
 export interface TextProps extends RNTextProps {
   variant?: TextVariant;
@@ -20,7 +20,7 @@ export function Text({ variant = 'body', color, style, ...rest }: TextProps) {
   );
 }
 
-function variantStyle(theme: ReturnType<typeof useTheme>, variant: TextVariant): TextStyle {
+export function variantStyle(theme: ReturnType<typeof useTheme>, variant: TextVariant): TextStyle {
   switch (variant) {
     case 'hero':
       return {
@@ -49,6 +49,14 @@ function variantStyle(theme: ReturnType<typeof useTheme>, variant: TextVariant):
         lineHeight: theme.fontSize.xs * theme.lineHeight.normal,
         letterSpacing: 1.2,
         textTransform: 'uppercase',
+      };
+    case 'caption':
+      // Same size/weight as 'label' but without the uppercase transform — for small text
+      // that renders arbitrary user-entered content (names, dates), which 'label' would mangle.
+      return {
+        fontFamily: theme.fontFamily.sansSemiBold,
+        fontSize: theme.fontSize.xs,
+        lineHeight: theme.fontSize.xs * theme.lineHeight.normal,
       };
     case 'body':
     default:

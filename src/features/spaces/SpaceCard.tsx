@@ -119,7 +119,7 @@ export function SpaceCard({ space, selected, onPress, onToggleFavorite, onEdit }
         </MiniButton>
       </View>
       <View style={{ position: 'absolute', left: theme.spacing.sm, right: theme.spacing.sm, bottom: theme.spacing.sm }}>
-        <Text variant="label" color={palette.text} numberOfLines={1}>
+        <Text variant="caption" color={palette.text} numberOfLines={1}>
           {space.name}
         </Text>
       </View>

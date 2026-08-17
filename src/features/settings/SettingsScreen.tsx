@@ -95,7 +95,7 @@ export function SettingsScreen() {
         <Text variant="title">Settings</Text>
 
         <Section title="Appearance">
-          <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
             {THEME_OPTIONS.map((option) => (
               <Chip
                 key={option.value}
@@ -185,7 +185,7 @@ export function SettingsScreen() {
           <Text variant="body" color={theme.neutral.textMuted} style={{ fontSize: theme.fontSize.sm }}>
             Week starts on
           </Text>
-          <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
             {WEEK_START_OPTIONS.map((option) => (
               <Chip
                 key={option.value}
