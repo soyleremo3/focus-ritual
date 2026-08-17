@@ -303,6 +303,11 @@ export function FocusScreen() {
 
   const phaseLabel = !isSessionActive || !session ? 'Ready' : session.phase === 'focus' ? 'Focus' : 'Break';
   const clockText = formatClock(clockMs);
+  // Scaled off the ring itself (not a fixed constant) so the longest format ("1:30:00")
+  // always stays on one line inside the ring on any screen size, while still being as large
+  // as that constraint allows. Calibrated against that specific string at the Fraunces
+  // display weight — leaves a small margin from the ring's stroke on every side.
+  const clockFontSize = Math.round(ringSize * 0.24);
 
   return (
     <View style={{ flex: 1 }}>
@@ -368,11 +373,11 @@ export function FocusScreen() {
               variant="hero"
               color={palette.text}
               numberOfLines={1}
-              // Always the display size, not the hero variant's default — hero is too big
-              // for an H:MM:SS clock ("1:30:00") to fit the ring on one line, and switching
-              // size by format (small for hours, big otherwise) looked inconsistent between
-              // modes. One fixed size for every format instead.
-              style={{ fontSize: theme.fontSize.display, lineHeight: theme.fontSize.display * theme.lineHeight.tight }}
+              // Always this one size for every format (never the hero variant's 88, which
+              // doesn't fit an H:MM:SS clock like "1:30:00" on one line) — scales with the
+              // ring itself so it's as large as fits without overflowing on any screen size,
+              // and MM:SS/H:MM:SS render at the same size instead of visibly jumping.
+              style={{ fontSize: clockFontSize, lineHeight: clockFontSize * theme.lineHeight.tight }}
             >
               {clockText}
             </Text>
