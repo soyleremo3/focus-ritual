@@ -277,18 +277,31 @@ export function FocusScreen() {
     router.push('/spaces');
   };
 
-  const currentPhaseMinutes = session
-    ? session.phase === 'focus'
-      ? session.focusMinutes
-      : session.breakMinutes
-    : MODE_DEFAULTS[mode].focusMinutes;
+  // A terminal (completed/cancelled) session lingers in the store until the next start() —
+  // isSessionActive (not just session != null) gates this, otherwise picking a new mode
+  // after finishing/cancelling a session would keep showing the old session's duration
+  // instead of the newly selected mode's, since only an explicit Start creates a fresh one.
+  const currentPhaseMinutes =
+    isSessionActive && session
+      ? session.phase === 'focus'
+        ? session.focusMinutes
+        : session.breakMinutes
+      : MODE_DEFAULTS[mode].focusMinutes;
   const plannedMs = currentPhaseMinutes != null ? currentPhaseMinutes * 60_000 : null;
 
-  const progress = session && plannedMs != null && elapsedMs != null ? Math.min(1, elapsedMs / plannedMs) : 0;
+  // Same isSessionActive gating as currentPhaseMinutes above — a terminal session must not
+  // keep the ring/clock/label showing its leftover progress once it's no longer active.
+  const progress =
+    isSessionActive && session && plannedMs != null && elapsedMs != null ? Math.min(1, elapsedMs / plannedMs) : 0;
 
-  const clockMs = session ? (remainingMs != null ? Math.max(0, remainingMs) : (elapsedMs ?? 0)) : (plannedMs ?? 0);
+  const clockMs =
+    isSessionActive && session
+      ? remainingMs != null
+        ? Math.max(0, remainingMs)
+        : (elapsedMs ?? 0)
+      : (plannedMs ?? 0);
 
-  const phaseLabel = !session ? 'Ready' : session.phase === 'focus' ? 'Focus' : 'Break';
+  const phaseLabel = !isSessionActive || !session ? 'Ready' : session.phase === 'focus' ? 'Focus' : 'Break';
 
   return (
     <View style={{ flex: 1 }}>
