@@ -1,6 +1,7 @@
+import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 
 import { EmptyState } from '@/components/EmptyState';
 import { Screen } from '@/components/Screen';
@@ -16,6 +17,7 @@ import {
   bestFocusSegment,
   favoriteRitualId,
   filterSessionsInRange,
+  formatFocusDuration,
   groupByRitual,
   groupByTask,
   last7DaysBuckets,
@@ -61,6 +63,11 @@ export function HistoryScreen() {
   const [ritualNames, setRitualNames] = useState<Record<string, string>>({});
   const [taskTitles, setTaskTitles] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Collapsed by default — the breakdowns are the most domain-literacy-dependent part of
+  // this screen ("by ritual", "by task"), so keeping them out of the first screenful is
+  // what actually makes the simple case (today's number, a chart, recent sessions) read
+  // as simple. Still one tap away for anyone who wants to dig in.
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -162,16 +169,29 @@ export function HistoryScreen() {
       >
         <Text variant="title">History</Text>
 
+        <View style={{ gap: theme.spacing.xxs }}>
+          <Text variant="label" color={theme.neutral.textMuted}>
+            Today
+          </Text>
+          <Text variant="title" style={{ fontSize: theme.fontSize.xxl }}>
+            {today.sessionCount > 0 ? `${formatFocusDuration(today.totalFocusMs)} focused` : 'No focus time yet'}
+          </Text>
+        </View>
+
         <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
-          <SummaryCard label="Today" summary={today} />
           <SummaryCard label="This Week" summary={week} />
           <SummaryCard label="This Month" summary={month} />
         </View>
 
         <View style={{ gap: theme.spacing.sm }}>
-          <Text variant="label" color={theme.neutral.textMuted}>
-            Last 7 Days
-          </Text>
+          <View>
+            <Text variant="label" color={theme.neutral.textMuted}>
+              Last 7 Days
+            </Text>
+            <Text variant="caption" color={theme.neutral.textMuted}>
+              Focus time each day this week
+            </Text>
+          </View>
           <Surface style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
             {dailyBars.map((bucket) => (
               <Bar
@@ -184,9 +204,14 @@ export function HistoryScreen() {
         </View>
 
         <View style={{ gap: theme.spacing.sm }}>
-          <Text variant="label" color={theme.neutral.textMuted}>
-            Weekly Rhythm
-          </Text>
+          <View>
+            <Text variant="label" color={theme.neutral.textMuted}>
+              Weekly Rhythm
+            </Text>
+            <Text variant="caption" color={theme.neutral.textMuted}>
+              Your usual pattern by weekday, across all-time
+            </Text>
+          </View>
           <Surface style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
             {rhythm.map((day) => (
               <Bar
@@ -208,12 +233,40 @@ export function HistoryScreen() {
           </Surface>
         )}
 
-        {ritualBreakdown.length > 0 && (
-          <BreakdownList title="By Ritual" entries={ritualBreakdown} resolveLabel={(key) => ritualNames[key] ?? '…'} />
-        )}
+        {(ritualBreakdown.length > 0 || taskBreakdown.length > 0) && (
+          <View style={{ gap: theme.spacing.md }}>
+            <Pressable
+              onPress={() => setDetailsExpanded((v) => !v)}
+              accessibilityRole="button"
+              accessibilityLabel={detailsExpanded ? 'Hide details' : 'Show details'}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}
+            >
+              <Text variant="label" color={theme.neutral.textMuted}>
+                Details
+              </Text>
+              <Feather
+                name={detailsExpanded ? 'chevron-up' : 'chevron-down'}
+                size={16}
+                color={theme.neutral.textMuted}
+              />
+            </Pressable>
 
-        {taskBreakdown.length > 0 && (
-          <BreakdownList title="By Task" entries={taskBreakdown} resolveLabel={(key) => taskTitles[key] ?? '…'} />
+            {detailsExpanded && (
+              <View style={{ gap: theme.spacing.xl }}>
+                {ritualBreakdown.length > 0 && (
+                  <BreakdownList
+                    title="By Ritual"
+                    entries={ritualBreakdown}
+                    resolveLabel={(key) => ritualNames[key] ?? '…'}
+                  />
+                )}
+
+                {taskBreakdown.length > 0 && (
+                  <BreakdownList title="By Task" entries={taskBreakdown} resolveLabel={(key) => taskTitles[key] ?? '…'} />
+                )}
+              </View>
+            )}
+          </View>
         )}
 
         <View style={{ gap: theme.spacing.sm }}>
