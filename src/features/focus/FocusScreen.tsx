@@ -474,20 +474,20 @@ export function FocusScreen() {
             // centered on one side, mode/controls stacked on the other) fits the available
             // height instead of the portrait stack's ring-then-controls order, which would
             // need far more vertical space than a landscape screen has.
-            <View
-              style={{
-                flex: 1,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: theme.spacing.lg,
-                paddingHorizontal: theme.spacing.lg,
-              }}
-            >
-              <TimerRing size={ringSize} progress={progress} trackColor={palette.surface} progressColor={palette.accent}>
-                {ringChildren}
-              </TimerRing>
-              <View style={{ alignItems: 'center', gap: theme.spacing.md }}>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: theme.spacing.lg }}>
+              {/* Both sides are flex:1, not sized-to-content — without that, the mode
+                  picker's horizontally-scrolling row claims its full unscrolled content
+                  width when measured inside a plain flex row (RN doesn't shrink row
+                  children by default), which was blowing the row wider than the screen
+                  and shoving the ring half off the left edge. flex:1 caps each side at
+                  exactly half the available width regardless of what its content wants,
+                  so the mode picker scrolls within its own half instead. */}
+              <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                <TimerRing size={ringSize} progress={progress} trackColor={palette.surface} progressColor={palette.accent}>
+                  {ringChildren}
+                </TimerRing>
+              </View>
+              <View style={{ flex: 1, alignItems: 'center', gap: theme.spacing.md }}>
                 {modeAndCustomFields}
                 {timerControlsElement}
               </View>
