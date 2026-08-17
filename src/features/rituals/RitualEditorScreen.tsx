@@ -248,6 +248,7 @@ export function RitualEditorScreen({ ritualId }: RitualEditorScreenProps) {
               <Chip
                 key={space.id}
                 label={space.name}
+                uppercase={false}
                 selected={space.id === spaceId}
                 onPress={() => {
                   haptics.select();

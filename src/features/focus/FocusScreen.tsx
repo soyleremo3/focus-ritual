@@ -309,7 +309,7 @@ export function FocusScreen() {
             accessibilityRole="button"
             accessibilityLabel={`Change Focus Space, currently ${spaceName}`}
           >
-            <Text variant="label" color={palette.textMuted}>
+            <Text variant="caption" color={palette.textMuted}>
               {spaceName}
             </Text>
           </Pressable>

@@ -15,6 +15,8 @@ export interface ChipProps extends Omit<PressableProps, 'style'> {
   mutedColor?: string;
   borderColor?: string;
   style?: StyleProp<ViewStyle>;
+  /** Set false when label is arbitrary user-entered content (e.g. a custom space's name) — otherwise it's uppercased like every other (app-defined) chip label. */
+  uppercase?: boolean;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -27,6 +29,7 @@ export function Chip({
   mutedColor,
   borderColor,
   style,
+  uppercase = true,
   ...rest
 }: ChipProps) {
   const theme = useTheme();
@@ -62,7 +65,11 @@ export function Chip({
       ]}
       {...rest}
     >
-      <Text variant="label" color={selected ? onAccent : muted} style={{ letterSpacing: 0.6 }}>
+      <Text
+        variant={uppercase ? 'label' : 'caption'}
+        color={selected ? onAccent : muted}
+        style={{ letterSpacing: 0.6 }}
+      >
         {label}
       </Text>
     </AnimatedPressable>
