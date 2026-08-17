@@ -1,3 +1,4 @@
+import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Keyboard, Pressable, View, useWindowDimensions } from 'react-native';
@@ -429,8 +430,21 @@ export function FocusScreen() {
               hitSlop={12}
               accessibilityRole="button"
               accessibilityLabel={`Change Focus Space, currently ${spaceName}`}
+              // Bare text here used to be indistinguishable from a label — this now matches
+              // the mixer button beside it (background chip + icon) so it visibly reads as
+              // "tap to change the background", not just informational text.
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: theme.spacing.xxs,
+                paddingVertical: theme.spacing.xxs,
+                paddingHorizontal: theme.spacing.sm,
+                borderRadius: theme.radius.pill,
+                backgroundColor: palette.surface,
+              }}
             >
-              <Text variant="caption" color={palette.textMuted}>
+              <Feather name="image" size={14} color={palette.text} />
+              <Text variant="caption" color={palette.text}>
                 {spaceName}
               </Text>
             </Pressable>
