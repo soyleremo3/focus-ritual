@@ -5,7 +5,13 @@ export interface EnginePlayer {
   play(): void;
   pause(): void;
   remove(): void;
-  setActiveForLockScreen(active: boolean, options?: { title: string; artist: string }): void;
+  /**
+   * Optional: not every runtime's AudioPlayer actually implements this at runtime even when
+   * the installed package's type definitions declare it (observed on a real device via Expo
+   * Go — the method was `undefined` despite the type signature promising it). The engine
+   * must check for it rather than assume it's callable.
+   */
+  setActiveForLockScreen?(active: boolean, options?: { title: string; artist: string }): void;
 }
 
 export interface SoundLayerMix {

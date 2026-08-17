@@ -93,7 +93,12 @@ export function createSoundEngine(options: SoundEngineOptions): SoundEngine {
       return;
     }
     if (nextOwner !== lockScreenOwnerId) {
-      layers.get(nextOwner)!.player.setActiveForLockScreen(true, { title: 'FocusRitual', artist: 'Ambient mix' });
+      const { player } = layers.get(nextOwner)!;
+      // Real bug caught on-device via Expo Go: this method is declared on expo-audio's
+      // AudioPlayer type but was `undefined` at runtime — calling it unconditionally threw
+      // synchronously from inside a Pressable's onPress handler (toggling a sound layer),
+      // which React error boundaries can't catch since it's outside the render phase.
+      player.setActiveForLockScreen?.(true, { title: 'FocusRitual', artist: 'Ambient mix' });
     }
     lockScreenOwnerId = nextOwner;
   }

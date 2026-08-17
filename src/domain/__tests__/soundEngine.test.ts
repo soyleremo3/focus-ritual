@@ -223,6 +223,27 @@ describe('createSoundEngine', () => {
     expect(engine.getLockScreenOwnerId()).toBe('fireplace');
   });
 
+  test('reassigning lock-screen ownership never throws when the player lacks setActiveForLockScreen', () => {
+    // Real bug caught on-device: expo-audio's AudioPlayer type declares this method but it
+    // was `undefined` at runtime. A fake player without it must not crash setMix().
+    class NoLockScreenPlayer implements EnginePlayer {
+      volume = 0;
+      loop = false;
+      play() {}
+      pause() {}
+      remove() {}
+      // setActiveForLockScreen intentionally omitted — matches the real-device gap.
+    }
+    const engine = createSoundEngine({
+      createPlayer: () => new NoLockScreenPlayer(),
+      rampMs: RAMP_MS,
+      rampStepMs: RAMP_STEP_MS,
+    });
+
+    expect(() => engine.setMix([{ soundId: 'rain', volume: 0.5 }])).not.toThrow();
+    expect(engine.getLockScreenOwnerId()).toBe('rain');
+  });
+
   test('dispose releases every player and clears state', () => {
     const { engine, players } = makeHarness();
     engine.setMix([{ soundId: 'rain', volume: 0.5 }, { soundId: 'wind', volume: 0.5 }]);
