@@ -1,5 +1,5 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { FlatList, TextInput, View } from 'react-native';
 
 import { EmptyState } from '@/components/EmptyState';
@@ -22,6 +22,7 @@ export function TodayScreen() {
   const create = useTaskStore((s) => s.create);
 
   const [draftTitle, setDraftTitle] = useState('');
+  const inputRef = useRef<TextInput>(null);
 
   // Refetch every time this tab regains focus, matching RitualsListScreen's pattern.
   useFocusEffect(
@@ -36,6 +37,17 @@ export function TodayScreen() {
     haptics.tap();
     setDraftTitle('');
     void create(trimmed);
+  };
+
+  // The add button must never feel dead on tap — `disabled` makes a Pressable swallow the
+  // press entirely (no feedback at all), which reads as broken. When there's nothing valid
+  // to add yet, tapping it just focuses the input instead of doing nothing.
+  const handleAddPress = () => {
+    if (isValidTaskTitle(draftTitle)) {
+      handleAdd();
+    } else {
+      inputRef.current?.focus();
+    }
   };
 
   return (
@@ -54,6 +66,7 @@ export function TodayScreen() {
         }}
       >
         <TextInput
+          ref={inputRef}
           value={draftTitle}
           onChangeText={setDraftTitle}
           onSubmitEditing={handleAdd}
@@ -75,8 +88,8 @@ export function TodayScreen() {
         />
         <IconButton
           icon="plus"
-          onPress={handleAdd}
-          disabled={!isValidTaskTitle(draftTitle)}
+          onPress={handleAddPress}
+          style={{ opacity: isValidTaskTitle(draftTitle) ? 1 : 0.5 }}
           accessibilityLabel="Add task"
         />
       </View>
