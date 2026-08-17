@@ -194,6 +194,29 @@ function generateFireplace() {
   return normalize(Array.from(samples), 0.88);
 }
 
+function generatePhaseCompleteChime() {
+  // A short two-note bell (each note = fundamental + a quiet fifth-above overtone for a
+  // bell-like timbre, not a flat sine beep), independent of the ambient loops above —
+  // this is the one-shot alert played when a Focus/Break phase completes.
+  const DURATION_SECONDS = 1.6;
+  const count = Math.floor(SAMPLE_RATE * DURATION_SECONDS);
+  const samples = new Float32Array(count);
+  const notes = [
+    { freq: 880, overtone: 1318.5, start: 0, decay: 1.1, amp: 0.6 },
+    { freq: 659.25, overtone: 987.77, start: 0.12, decay: 1.3, amp: 0.5 },
+  ];
+  for (const note of notes) {
+    const startSample = Math.floor(note.start * SAMPLE_RATE);
+    for (let i = startSample; i < count; i++) {
+      const t = (i - startSample) / SAMPLE_RATE;
+      const envelope = Math.exp(-t / note.decay);
+      samples[i] += Math.sin(2 * Math.PI * note.freq * t) * note.amp * envelope;
+      samples[i] += Math.sin(2 * Math.PI * note.overtone * t) * note.amp * 0.4 * envelope;
+    }
+  }
+  return normalize(Array.from(samples), 0.9);
+}
+
 writeWav('white-noise.wav', normalize(Array.from(generateWhiteNoise()), 0.5));
 writeWav('brown-noise.wav', generateBrownNoise());
 writeWav('rain.wav', generateRain());
@@ -201,3 +224,4 @@ writeWav('pink-noise.wav', generatePinkNoise());
 writeWav('ocean-waves.wav', generateOceanWaves());
 writeWav('wind.wav', generateWind());
 writeWav('fireplace.wav', generateFireplace());
+writeWav('phase-complete.wav', generatePhaseCompleteChime());

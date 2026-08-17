@@ -19,6 +19,7 @@ import {
   type AutoStartSettings,
 } from '@/domain/timer/timerEngine';
 import type { TimerMode, TimerSession } from '@/domain/timer/types';
+import { playPhaseCompleteChime } from '@/lib/audio/phaseCompleteChime';
 import * as haptics from '@/lib/haptics';
 import { planPhaseEndNotification } from '@/domain/notifications/notificationPlan';
 import {
@@ -108,9 +109,13 @@ function stopInterval() {
  * foregrounded for its *entire* duration (the common case — someone watching the ring count
  * down) never left 'running' on its own. The clock would hit 00:00 and freeze there, with
  * Pause/Cancel/Finish still showing, until the user happened to background/foreground the
- * app. success() fires only from this live path — reconcile() running later because of a
- * background/foreground cycle or a cold start means the user wasn't looking, so a haptic
- * then would be a non sequitur rather than useful feedback.
+ * app. success() and playPhaseCompleteChime() fire only from this live path — reconcile()
+ * running later because of a background/foreground cycle or a cold start means the user
+ * wasn't looking, so haptic/audio feedback then would be a non sequitur rather than useful.
+ * The chime is played directly rather than relying on the scheduled notification's sound:
+ * syncNotification() below cancels-and-reschedules against the same fixed ID the instant
+ * the phase transitions, which can race away the original notification before the OS ever
+ * gets to deliver (and sound) it while the app is foregrounded.
  */
 function startInterval() {
   if (intervalId != null) return;
@@ -125,6 +130,7 @@ function startInterval() {
         persistSession(reconciled, now);
         syncNotification(reconciled, now);
         haptics.success();
+        playPhaseCompleteChime();
         return;
       }
     }

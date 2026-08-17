@@ -20,6 +20,19 @@ required. Expanded from 3 to 7 loops in Phase 5 (Sound Library & Mixer Polish) �
 addition follows the same synthesis-only policy as the original three, so the bundled
 library stays redistribution-safe by construction rather than by sourcing diligence.
 
+Several of these generators use `Math.random()` (white/brown/pink noise, rain/fireplace's
+droplet and crackle timing), so re-running the script regenerates *every* file with new
+random noise, not just one you're adding — perceptually identical but a different binary
+each time. Discard the incidental diffs on files you didn't mean to touch
+(`git checkout -- assets/sounds/<file>.wav`) rather than committing them.
+
+## Phase-completion chime (`assets/sounds/phase-complete.wav`)
+
+A short two-note bell (sine tones with a quiet fifth-above overtone each, exponential
+decay), synthesized by the same script — played once when a Focus/Break phase completes
+(`src/lib/audio/phaseCompleteChime.ts`), not part of the ambient mixer above. Same
+original-work, no-license-required status as the loops.
+
 ## Focus Space scenes
 
 Bundled Focus Space backdrops (Amber Study, Rain Window, Midnight Forest — see
