@@ -10,6 +10,8 @@ function makeTask(overrides: Partial<Task>): Task {
     sortOrder: 0,
     createdAt: 0,
     completedAt: null,
+    mode: null,
+    focusMinutes: null,
     ...overrides,
   };
 }

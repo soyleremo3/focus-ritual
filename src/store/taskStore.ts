@@ -4,6 +4,7 @@ import { getDatabase } from '@/db/client';
 import * as tasksRepo from '@/db/repositories/tasksRepo';
 import { sortTasks } from '@/domain/task/task';
 import type { Task } from '@/domain/task/types';
+import type { TimerMode } from '@/domain/timer/types';
 
 interface TaskStoreState {
   tasks: Task[];
@@ -14,6 +15,7 @@ interface TaskStoreState {
   refresh: () => Promise<void>;
   create: (title: string) => Promise<Task>;
   updateTitle: (id: string, title: string) => Promise<void>;
+  updateDuration: (id: string, mode: TimerMode | null, focusMinutes: number | null) => Promise<void>;
   toggleDone: (id: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
 }
@@ -45,6 +47,12 @@ export const useTaskStore = create<TaskStoreState>()((set, get) => ({
   updateTitle: async (id, title) => {
     const db = await getDatabase();
     await tasksRepo.updateTaskTitle(db, id, title);
+    await get().refresh();
+  },
+
+  updateDuration: async (id, mode, focusMinutes) => {
+    const db = await getDatabase();
+    await tasksRepo.updateTaskDuration(db, id, mode, focusMinutes);
     await get().refresh();
   },
 

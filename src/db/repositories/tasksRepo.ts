@@ -1,6 +1,7 @@
 import { generateId } from '@/domain/id';
 import { nextSortOrder } from '@/domain/task/task';
 import type { Task } from '@/domain/task/types';
+import type { TimerMode } from '@/domain/timer/types';
 
 import type { Database } from '../types';
 
@@ -12,6 +13,8 @@ interface TaskRow {
   sort_order: number;
   created_at: number;
   completed_at: number | null;
+  focus_minutes: number | null;
+  mode: string | null;
 }
 
 function rowToTask(row: TaskRow): Task {
@@ -23,6 +26,8 @@ function rowToTask(row: TaskRow): Task {
     sortOrder: row.sort_order,
     createdAt: row.created_at,
     completedAt: row.completed_at,
+    focusMinutes: row.focus_minutes,
+    mode: row.mode as TimerMode | null,
   };
 }
 
@@ -51,11 +56,23 @@ export async function createTask(db: Database, title: string, now: number = Date
     sortOrder,
     createdAt: now,
     completedAt: null,
+    focusMinutes: null,
+    mode: null,
   };
 }
 
 export async function updateTaskTitle(db: Database, id: string, title: string): Promise<void> {
   await db.runAsync('UPDATE tasks SET title = ? WHERE id = ?', [title, id]);
+}
+
+/** Set to null/null to clear the override and fall back to the Focus screen's own selection. */
+export async function updateTaskDuration(
+  db: Database,
+  id: string,
+  mode: TimerMode | null,
+  focusMinutes: number | null
+): Promise<void> {
+  await db.runAsync('UPDATE tasks SET mode = ?, focus_minutes = ? WHERE id = ?', [mode, focusMinutes, id]);
 }
 
 export async function toggleTaskDone(db: Database, id: string, isDone: boolean, now: number = Date.now()): Promise<void> {

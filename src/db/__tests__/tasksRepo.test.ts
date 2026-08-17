@@ -1,7 +1,14 @@
 import { createSession } from '@/domain/timer/timerEngine';
 
 import { getSessionById, upsertSession } from '../repositories/sessionsRepo';
-import { createTask, deleteTask, listTasks, toggleTaskDone, updateTaskTitle } from '../repositories/tasksRepo';
+import {
+  createTask,
+  deleteTask,
+  listTasks,
+  toggleTaskDone,
+  updateTaskDuration,
+  updateTaskTitle,
+} from '../repositories/tasksRepo';
 import { migrate } from '../schema';
 import type { Database } from '../types';
 import { createTestDatabase } from './testDatabase';
@@ -24,6 +31,23 @@ describe('tasksRepo', () => {
     expect(b.sortOrder).toBe(1);
     expect(a.isDone).toBe(false);
     expect(a.completedAt).toBeNull();
+    expect(a.mode).toBeNull();
+    expect(a.focusMinutes).toBeNull();
+  });
+
+  test('updateTaskDuration sets a mode/duration override, and can be cleared back to null', async () => {
+    const db = await setupDb();
+    const task = await createTask(db, 'Write report', T0);
+
+    await updateTaskDuration(db, task.id, 'deepWork', 50);
+    let tasks = await listTasks(db);
+    expect(tasks[0]?.mode).toBe('deepWork');
+    expect(tasks[0]?.focusMinutes).toBe(50);
+
+    await updateTaskDuration(db, task.id, null, null);
+    tasks = await listTasks(db);
+    expect(tasks[0]?.mode).toBeNull();
+    expect(tasks[0]?.focusMinutes).toBeNull();
   });
 
   test('listTasks returns every created task', async () => {

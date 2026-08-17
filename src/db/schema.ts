@@ -140,6 +140,17 @@ export const MIGRATIONS: Migration[] = [
       `ALTER TABLE settings ADD COLUMN pause_sound_with_timer INTEGER NOT NULL DEFAULT 1`,
     ],
   },
+  {
+    version: 6,
+    statements: [
+      // Per-task duration/mode customization: a task can pin the mode+duration its own
+      // "Start" button begins with, instead of always falling back to whatever mode is
+      // currently selected on the Focus screen. Both nullable — NULL means "no override",
+      // so every existing task keeps behaving exactly as it did before this migration.
+      `ALTER TABLE tasks ADD COLUMN focus_minutes INTEGER`,
+      `ALTER TABLE tasks ADD COLUMN mode TEXT`,
+    ],
+  },
 ];
 
 interface UserVersionRow {

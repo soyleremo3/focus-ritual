@@ -1,3 +1,5 @@
+import type { TimerMode } from '@/domain/timer/types';
+
 export interface Task {
   id: string;
   title: string;
@@ -7,4 +9,8 @@ export interface Task {
   sortOrder: number;
   createdAt: number;
   completedAt: number | null;
+  /** Null = starting this task uses whatever mode/duration is currently selected on the
+   * Focus screen (the pre-existing behavior) — set together, never independently. */
+  mode: TimerMode | null;
+  focusMinutes: number | null;
 }
