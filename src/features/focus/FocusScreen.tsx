@@ -52,8 +52,18 @@ async function resolveTaskTitle(id: string): Promise<string | null> {
 
 export function FocusScreen() {
   const theme = useTheme();
-  const { width } = useWindowDimensions();
-  const ringSize = width > 0 ? Math.min(300, width * 0.72) : 260;
+  const { width, height } = useWindowDimensions();
+  // Phones held sideways have far less height than width — a ring sized off width alone
+  // (the portrait case, where height is the generous dimension) would blow past the
+  // available height and clip against the mode picker / controls stacked beside it.
+  const isLandscape = width > height;
+  const ringSize = isLandscape
+    ? height > 0
+      ? Math.min(260, height * 0.62)
+      : 220
+    : width > 0
+      ? Math.min(300, width * 0.72)
+      : 260;
 
   const [mode, setMode] = useState<TimerMode>('pomodoro');
   const [mixerVisible, setMixerVisible] = useState(false);
@@ -323,6 +333,78 @@ export function FocusScreen() {
   // display weight — leaves a small margin from the ring's stroke on every side.
   const clockFontSize = Math.round(ringSize * 0.24);
 
+  // Shared between the portrait (stacked) and landscape (side-by-side) layouts below so
+  // the two branches can't drift apart from each other over time.
+  const ringChildren = (
+    <>
+      <Text variant="label" color={palette.textMuted} style={{ marginBottom: theme.spacing.xs }}>
+        {phaseLabel}
+      </Text>
+      <Text
+        variant="hero"
+        color={palette.text}
+        numberOfLines={1}
+        style={{ fontSize: clockFontSize, lineHeight: clockFontSize * theme.lineHeight.tight }}
+      >
+        {clockText}
+      </Text>
+    </>
+  );
+
+  const modeAndCustomFields = (
+    <>
+      {!isSessionActive && (
+        <ModePicker
+          selected={mode}
+          onSelect={setMode}
+          accentColor={palette.accent}
+          onAccentColor={palette.onAccent}
+          mutedColor={palette.textMuted}
+          borderColor={palette.surface}
+        />
+      )}
+
+      {!isSessionActive && mode === 'custom' && (
+        <View style={{ flexDirection: 'row', gap: theme.spacing.xl }}>
+          <NumberField
+            label="Focus"
+            value={customFocusMinutes}
+            onChange={setCustomFocusMinutes}
+            min={1}
+            max={480}
+            unit="min"
+            textColor={palette.text}
+            mutedColor={palette.textMuted}
+          />
+          <NumberField
+            label="Break"
+            value={customBreakMinutes}
+            onChange={setCustomBreakMinutes}
+            min={0}
+            max={60}
+            unit="min"
+            textColor={palette.text}
+            mutedColor={palette.textMuted}
+          />
+        </View>
+      )}
+    </>
+  );
+
+  const timerControlsElement = (
+    <TimerControls
+      session={session}
+      palette={palette}
+      onStart={handleStart}
+      onPause={handlePause}
+      onResume={handleResume}
+      onAdvancePhase={handleAdvancePhase}
+      onContinueFocus={handleContinueFocus}
+      onCancel={handleCancel}
+      onFinish={handleFinish}
+    />
+  );
+
   return (
     <View style={{ flex: 1 }}>
       <SceneBackdrop palette={palette} imageUri={spaceImageUri} />
@@ -373,75 +455,41 @@ export function FocusScreen() {
             </Text>
           )}
 
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: theme.spacing.xl }}>
-            {!isSessionActive && (
-              <ModePicker
-                selected={mode}
-                onSelect={setMode}
-                accentColor={palette.accent}
-                onAccentColor={palette.onAccent}
-                mutedColor={palette.textMuted}
-                borderColor={palette.surface}
-              />
-            )}
-
-            {!isSessionActive && mode === 'custom' && (
-              <View style={{ flexDirection: 'row', gap: theme.spacing.xl }}>
-                <NumberField
-                  label="Focus"
-                  value={customFocusMinutes}
-                  onChange={setCustomFocusMinutes}
-                  min={1}
-                  max={480}
-                  unit="min"
-                  textColor={palette.text}
-                  mutedColor={palette.textMuted}
-                />
-                <NumberField
-                  label="Break"
-                  value={customBreakMinutes}
-                  onChange={setCustomBreakMinutes}
-                  min={0}
-                  max={60}
-                  unit="min"
-                  textColor={palette.text}
-                  mutedColor={palette.textMuted}
-                />
+          {isLandscape ? (
+            // Sideways phones are short on height, not width — a side-by-side row (ring
+            // centered on one side, mode/controls stacked on the other) fits the available
+            // height instead of the portrait stack's ring-then-controls order, which would
+            // need far more vertical space than a landscape screen has.
+            <View
+              style={{
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: theme.spacing.lg,
+                paddingHorizontal: theme.spacing.lg,
+              }}
+            >
+              <TimerRing size={ringSize} progress={progress} trackColor={palette.surface} progressColor={palette.accent}>
+                {ringChildren}
+              </TimerRing>
+              <View style={{ alignItems: 'center', gap: theme.spacing.md }}>
+                {modeAndCustomFields}
+                {timerControlsElement}
               </View>
-            )}
+            </View>
+          ) : (
+            <>
+              <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: theme.spacing.xl }}>
+                {modeAndCustomFields}
+                <TimerRing size={ringSize} progress={progress} trackColor={palette.surface} progressColor={palette.accent}>
+                  {ringChildren}
+                </TimerRing>
+              </View>
 
-            <TimerRing size={ringSize} progress={progress} trackColor={palette.surface} progressColor={palette.accent}>
-              <Text variant="label" color={palette.textMuted} style={{ marginBottom: theme.spacing.xs }}>
-                {phaseLabel}
-              </Text>
-              <Text
-                variant="hero"
-                color={palette.text}
-                numberOfLines={1}
-                // Always this one size for every format (never the hero variant's 88, which
-                // doesn't fit an H:MM:SS clock like "1:30:00" on one line) — scales with the
-                // ring itself so it's as large as fits without overflowing on any screen size,
-                // and MM:SS/H:MM:SS render at the same size instead of visibly jumping.
-                style={{ fontSize: clockFontSize, lineHeight: clockFontSize * theme.lineHeight.tight }}
-              >
-                {clockText}
-              </Text>
-            </TimerRing>
-          </View>
-
-          <View style={{ alignItems: 'center', paddingBottom: theme.spacing.xl }}>
-            <TimerControls
-              session={session}
-              palette={palette}
-              onStart={handleStart}
-              onPause={handlePause}
-              onResume={handleResume}
-              onAdvancePhase={handleAdvancePhase}
-              onContinueFocus={handleContinueFocus}
-              onCancel={handleCancel}
-              onFinish={handleFinish}
-            />
-          </View>
+              <View style={{ alignItems: 'center', paddingBottom: theme.spacing.xl }}>{timerControlsElement}</View>
+            </>
+          )}
         </Pressable>
       </SafeAreaView>
 

@@ -5,7 +5,7 @@ import { useSettingsStore } from '@/store/settingsStore';
 
 import { durations, easing, springConfig } from './motion';
 import { defaultSceneId, scenePalettes, type SceneId, type ScenePalette } from './scenePalettes';
-import { fontSize, fontWeight, lineHeight, radius, spacing, tracking } from './tokens';
+import { fontSize, fontWeight, layout, lineHeight, radius, spacing, tracking } from './tokens';
 import { fontFamily } from './typography';
 
 export interface NeutralPalette {
@@ -56,6 +56,7 @@ interface ThemeContextValue {
   neutral: NeutralPalette;
   spacing: typeof spacing;
   radius: typeof radius;
+  layout: typeof layout;
   fontSize: typeof fontSize;
   fontWeight: typeof fontWeight;
   lineHeight: typeof lineHeight;
@@ -85,6 +86,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       neutral,
       spacing,
       radius,
+      layout,
       fontSize,
       fontWeight,
       lineHeight,

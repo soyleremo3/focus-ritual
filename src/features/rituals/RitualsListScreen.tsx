@@ -61,7 +61,13 @@ export function RitualsListScreen() {
           data={rituals}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => <RitualCard ritual={item} />}
-          contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.md }}
+          contentContainerStyle={{
+            padding: theme.spacing.lg,
+            gap: theme.spacing.md,
+            alignSelf: 'center',
+            width: '100%',
+            maxWidth: theme.layout.maxContentWidth,
+          }}
         />
       )}
     </Screen>

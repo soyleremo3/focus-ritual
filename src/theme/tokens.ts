@@ -46,3 +46,9 @@ export const tracking = {
   tight: -0.5,
   normal: 0,
 } as const;
+
+export const layout = {
+  /** Caps scrollable list/form content on wide landscape or tablet widths so text lines
+   * and cards don't stretch edge-to-edge — content stays centered instead. */
+  maxContentWidth: 640,
+} as const;

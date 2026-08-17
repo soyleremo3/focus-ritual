@@ -150,7 +150,14 @@ export function HistoryScreen() {
   return (
     <Screen>
       <ScrollView
-        contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.xl, paddingBottom: theme.spacing.xxxl }}
+        contentContainerStyle={{
+          padding: theme.spacing.lg,
+          gap: theme.spacing.xl,
+          paddingBottom: theme.spacing.xxxl,
+          alignSelf: 'center',
+          width: '100%',
+          maxWidth: theme.layout.maxContentWidth,
+        }}
         showsVerticalScrollIndicator={false}
       >
         <Text variant="title">History</Text>

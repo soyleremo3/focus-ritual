@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
-import { FlatList, View } from 'react-native';
+import { FlatList, View, useWindowDimensions } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
@@ -13,10 +13,14 @@ import { useTheme } from '@/theme/ThemeProvider';
 
 import { SpaceCard } from './SpaceCard';
 
-const NUM_COLUMNS = 2;
+// A fixed 2 columns stretches cards ugly on a wide landscape/tablet width — one more
+// column keeps card proportions roughly the same instead of just getting wider.
+const WIDE_LAYOUT_MIN_WIDTH = 600;
 
 export function SpacesGalleryScreen() {
   const theme = useTheme();
+  const { width } = useWindowDimensions();
+  const numColumns = width >= WIDE_LAYOUT_MIN_WIDTH ? 3 : 2;
   const spaces = useSpaceStore((s) => s.spaces);
   const activeSpaceId = useSpaceStore((s) => s.activeSpaceId);
   const error = useSpaceStore((s) => s.error);
@@ -71,9 +75,12 @@ export function SpacesGalleryScreen() {
         <EmptyState icon="alert-triangle" title="Couldn't load Focus Spaces" message={error} onRetry={() => void refresh()} />
       ) : (
         <FlatList
+          // FlatList requires a remount (not just a prop change) to switch column count —
+          // keying on it forces that when rotating between portrait and wide landscape.
+          key={numColumns}
           data={spaces}
           keyExtractor={(item) => item.id}
-          numColumns={NUM_COLUMNS}
+          numColumns={numColumns}
           columnWrapperStyle={{ gap: theme.spacing.sm }}
           contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.sm, paddingBottom: theme.spacing.xxxl }}
           renderItem={({ item }) => (

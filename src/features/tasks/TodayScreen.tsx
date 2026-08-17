@@ -107,7 +107,14 @@ export function TodayScreen() {
           data={tasks}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => <TaskCard task={item} />}
-          contentContainerStyle={{ padding: theme.spacing.lg, paddingTop: 0, gap: theme.spacing.sm }}
+          contentContainerStyle={{
+            padding: theme.spacing.lg,
+            paddingTop: 0,
+            gap: theme.spacing.sm,
+            alignSelf: 'center',
+            width: '100%',
+            maxWidth: theme.layout.maxContentWidth,
+          }}
         />
       )}
     </Screen>

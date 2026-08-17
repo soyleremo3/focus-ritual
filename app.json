@@ -3,7 +3,7 @@
     "name": "FocusRitual",
     "slug": "FocusRitual",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "focusritual",
     "userInterfaceStyle": "automatic",
