@@ -14,6 +14,8 @@ interface SpaceStoreState {
   activeSpaceId: string;
   /** True once the first refresh() has resolved. */
   loaded: boolean;
+  /** Set when refresh() fails (e.g. a DB read error) — lets the screen show a retry state instead of a blank grid. */
+  error: string | null;
   refresh: () => Promise<void>;
   /** Explicit user pick from the gallery — persists and marks the space used. */
   selectSpace: (id: string) => Promise<void>;
@@ -28,11 +30,17 @@ export const useSpaceStore = create<SpaceStoreState>()((set, get) => ({
   spaces: [],
   activeSpaceId: defaultSceneId,
   loaded: false,
+  error: null,
 
   refresh: async () => {
-    const db = await getDatabase();
-    const spaces = await spacesRepo.listSpaces(db);
-    set({ spaces: sortSpaces(spaces), loaded: true });
+    try {
+      const db = await getDatabase();
+      const spaces = await spacesRepo.listSpaces(db);
+      set({ spaces: sortSpaces(spaces), loaded: true, error: null });
+    } catch (error) {
+      console.error('[spaceStore] failed to refresh', error);
+      set({ loaded: true, error: 'Could not load Focus Spaces.' });
+    }
   },
 
   selectSpace: async (id) => {

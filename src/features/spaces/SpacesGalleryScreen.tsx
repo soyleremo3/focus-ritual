@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 import { FlatList, View } from 'react-native';
 
 import { Button } from '@/components/Button';
+import { EmptyState } from '@/components/EmptyState';
 import { IconButton } from '@/components/IconButton';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
@@ -18,6 +19,7 @@ export function SpacesGalleryScreen() {
   const theme = useTheme();
   const spaces = useSpaceStore((s) => s.spaces);
   const activeSpaceId = useSpaceStore((s) => s.activeSpaceId);
+  const error = useSpaceStore((s) => s.error);
   const refresh = useSpaceStore((s) => s.refresh);
   const selectSpace = useSpaceStore((s) => s.selectSpace);
   const toggleFavorite = useSpaceStore((s) => s.toggleFavorite);
@@ -65,27 +67,31 @@ export function SpacesGalleryScreen() {
         <IconButton icon="x" size={18} onPress={() => router.back()} accessibilityLabel="Close Focus Spaces" />
       </View>
 
-      <FlatList
-        data={spaces}
-        keyExtractor={(item) => item.id}
-        numColumns={NUM_COLUMNS}
-        columnWrapperStyle={{ gap: theme.spacing.sm }}
-        contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.sm, paddingBottom: theme.spacing.xxxl }}
-        renderItem={({ item }) => (
-          <SpaceCard
-            space={item}
-            selected={item.id === activeSpaceId}
-            onPress={() => handleSelect(item.id)}
-            onToggleFavorite={() => handleToggleFavorite(item.id)}
-            onEdit={item.kind === 'custom' ? () => handleEdit(item.id) : undefined}
-          />
-        )}
-        ListFooterComponent={
-          <View style={{ paddingTop: theme.spacing.sm }}>
-            <Button label="Add Custom Space" variant="secondary" onPress={handleAddCustomSpace} />
-          </View>
-        }
-      />
+      {error ? (
+        <EmptyState icon="alert-triangle" title="Couldn't load Focus Spaces" message={error} onRetry={() => void refresh()} />
+      ) : (
+        <FlatList
+          data={spaces}
+          keyExtractor={(item) => item.id}
+          numColumns={NUM_COLUMNS}
+          columnWrapperStyle={{ gap: theme.spacing.sm }}
+          contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.sm, paddingBottom: theme.spacing.xxxl }}
+          renderItem={({ item }) => (
+            <SpaceCard
+              space={item}
+              selected={item.id === activeSpaceId}
+              onPress={() => handleSelect(item.id)}
+              onToggleFavorite={() => handleToggleFavorite(item.id)}
+              onEdit={item.kind === 'custom' ? () => handleEdit(item.id) : undefined}
+            />
+          )}
+          ListFooterComponent={
+            <View style={{ paddingTop: theme.spacing.sm }}>
+              <Button label="Add Custom Space" variant="secondary" onPress={handleAddCustomSpace} />
+            </View>
+          }
+        />
+      )}
     </Screen>
   );
 }

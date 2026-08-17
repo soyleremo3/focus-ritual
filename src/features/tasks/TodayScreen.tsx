@@ -17,6 +17,7 @@ export function TodayScreen() {
   const theme = useTheme();
   const tasks = useTaskStore((s) => s.tasks);
   const loaded = useTaskStore((s) => s.loaded);
+  const error = useTaskStore((s) => s.error);
   const refresh = useTaskStore((s) => s.refresh);
   const create = useTaskStore((s) => s.create);
 
@@ -80,7 +81,9 @@ export function TodayScreen() {
         />
       </View>
 
-      {loaded && tasks.length === 0 ? (
+      {error ? (
+        <EmptyState icon="alert-triangle" title="Couldn't load tasks" message={error} onRetry={() => void refresh()} />
+      ) : loaded && tasks.length === 0 ? (
         <EmptyState
           icon="check-square"
           title="Nothing today"

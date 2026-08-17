@@ -5,6 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { initNotifications } from '@/lib/notifications/scheduler';
 import { fontsToLoad } from '@/theme/typography';
 import { ThemeProvider } from '@/theme/ThemeProvider';
@@ -37,15 +38,17 @@ export default function RootLayout() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="rituals/new" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="rituals/[id]" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="spaces" options={{ presentation: 'modal' }} />
-        </Stack>
-      </ThemeProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <ThemeProvider>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="rituals/new" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="rituals/[id]" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="spaces" options={{ presentation: 'modal' }} />
+          </Stack>
+        </ThemeProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }

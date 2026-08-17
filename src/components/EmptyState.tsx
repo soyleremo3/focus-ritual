@@ -3,15 +3,18 @@ import { View } from 'react-native';
 
 import { useTheme } from '@/theme/ThemeProvider';
 
+import { Button } from './Button';
 import { Text } from './Text';
 
 export interface EmptyStateProps {
   icon?: keyof typeof Feather.glyphMap;
   title: string;
   message?: string;
+  /** Renders a "Try Again" button below the message — for error states a reload can recover from. */
+  onRetry?: () => void;
 }
 
-export function EmptyState({ icon = 'clock', title, message }: EmptyStateProps) {
+export function EmptyState({ icon = 'clock', title, message, onRetry }: EmptyStateProps) {
   const theme = useTheme();
   return (
     <View
@@ -31,6 +34,9 @@ export function EmptyState({ icon = 'clock', title, message }: EmptyStateProps) 
         <Text variant="body" color={theme.neutral.textMuted} style={{ textAlign: 'center' }}>
           {message}
         </Text>
+      ) : null}
+      {onRetry ? (
+        <Button label="Try Again" variant="secondary" onPress={onRetry} style={{ marginTop: theme.spacing.sm }} />
       ) : null}
     </View>
   );

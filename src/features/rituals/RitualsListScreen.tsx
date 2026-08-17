@@ -16,6 +16,7 @@ export function RitualsListScreen() {
   const theme = useTheme();
   const rituals = useRitualStore((s) => s.rituals);
   const loaded = useRitualStore((s) => s.loaded);
+  const error = useRitualStore((s) => s.error);
   const refresh = useRitualStore((s) => s.refresh);
 
   // Refetch every time this tab regains focus, so returning from the editor (create,
@@ -47,7 +48,9 @@ export function RitualsListScreen() {
         <Button label="New" onPress={handleCreate} />
       </View>
 
-      {loaded && rituals.length === 0 ? (
+      {error ? (
+        <EmptyState icon="alert-triangle" title="Couldn't load rituals" message={error} onRetry={() => void refresh()} />
+      ) : loaded && rituals.length === 0 ? (
         <EmptyState
           icon="repeat"
           title="No rituals yet"

@@ -60,12 +60,14 @@ export function HistoryScreen() {
   const [sessions, setSessions] = useState<TimerSession[] | null>(null);
   const [ritualNames, setRitualNames] = useState<Record<string, string>>({});
   const [taskTitles, setTaskTitles] = useState<Record<string, string>>({});
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       const db = await getDatabase();
       const terminal = await listTerminalSessions(db);
       setSessions(terminal);
+      setLoadError(null);
 
       const ritualIds = [...new Set(terminal.map((s) => s.ritualId).filter((id): id is string => id != null))];
       const taskIds = [...new Set(terminal.map((s) => s.taskId).filter((id): id is string => id != null))];
@@ -77,6 +79,7 @@ export function HistoryScreen() {
       setTaskTitles(Object.fromEntries(titleEntries));
     } catch (error) {
       console.error('[HistoryScreen] failed to load session history', error);
+      setLoadError('Could not load session history.');
     }
   }, []);
 
@@ -87,6 +90,14 @@ export function HistoryScreen() {
       void load();
     }, [load])
   );
+
+  if (loadError && sessions == null) {
+    return (
+      <Screen>
+        <EmptyState icon="alert-triangle" title="Couldn't load history" message={loadError} onRetry={() => void load()} />
+      </Screen>
+    );
+  }
 
   if (sessions == null) {
     return (

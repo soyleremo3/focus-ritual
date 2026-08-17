@@ -9,6 +9,8 @@ interface TaskStoreState {
   tasks: Task[];
   /** True once the first refresh() has resolved — lets screens distinguish "loading" from "genuinely empty". */
   loaded: boolean;
+  /** Set when refresh() fails (e.g. a DB read error) — lets the screen show a retry state instead of a blank list. */
+  error: string | null;
   refresh: () => Promise<void>;
   create: (title: string) => Promise<Task>;
   updateTitle: (id: string, title: string) => Promise<void>;
@@ -20,11 +22,17 @@ interface TaskStoreState {
 export const useTaskStore = create<TaskStoreState>()((set, get) => ({
   tasks: [],
   loaded: false,
+  error: null,
 
   refresh: async () => {
-    const db = await getDatabase();
-    const tasks = await tasksRepo.listTasks(db);
-    set({ tasks: sortTasks(tasks), loaded: true });
+    try {
+      const db = await getDatabase();
+      const tasks = await tasksRepo.listTasks(db);
+      set({ tasks: sortTasks(tasks), loaded: true, error: null });
+    } catch (error) {
+      console.error('[taskStore] failed to refresh', error);
+      set({ loaded: true, error: 'Could not load tasks.' });
+    }
   },
 
   create: async (title) => {

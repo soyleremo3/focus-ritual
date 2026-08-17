@@ -10,6 +10,8 @@ interface RitualStoreState {
   rituals: Ritual[];
   /** True once the first refresh() has resolved — lets screens distinguish "loading" from "genuinely empty". */
   loaded: boolean;
+  /** Set when refresh() fails (e.g. a DB read error) — lets the screen show a retry state instead of a blank list. */
+  error: string | null;
   refresh: () => Promise<void>;
   create: (draft: RitualDraft) => Promise<Ritual>;
   update: (id: string, draft: RitualDraft) => Promise<void>;
@@ -23,11 +25,17 @@ interface RitualStoreState {
 export const useRitualStore = create<RitualStoreState>()((set, get) => ({
   rituals: [],
   loaded: false,
+  error: null,
 
   refresh: async () => {
-    const db = await getDatabase();
-    const rituals = await ritualsRepo.listRituals(db);
-    set({ rituals: sortRituals(rituals), loaded: true });
+    try {
+      const db = await getDatabase();
+      const rituals = await ritualsRepo.listRituals(db);
+      set({ rituals: sortRituals(rituals), loaded: true, error: null });
+    } catch (error) {
+      console.error('[ritualStore] failed to refresh', error);
+      set({ loaded: true, error: 'Could not load rituals.' });
+    }
   },
 
   create: async (draft) => {
