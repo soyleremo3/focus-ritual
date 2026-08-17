@@ -10,6 +10,7 @@ import { getRitualById } from '@/db/repositories/ritualsRepo';
 import { getTaskById } from '@/db/repositories/tasksRepo';
 import { ritualToActiveMix, ritualToSessionStart } from '@/domain/ritual/ritual';
 import type { Ritual } from '@/domain/ritual/types';
+import type { Task } from '@/domain/task/types';
 import { MODE_DEFAULTS, type TimerMode } from '@/domain/timer/types';
 import { NumberField } from '@/features/rituals/NumberField';
 import * as haptics from '@/lib/haptics';
@@ -42,12 +43,11 @@ async function resolveRitual(id: string): Promise<Ritual | null> {
 }
 
 /** Cache-first (taskStore), falling back to a direct DB read if the store hasn't loaded yet. */
-async function resolveTaskTitle(id: string): Promise<string | null> {
+async function resolveTask(id: string): Promise<Task | null> {
   const cached = useTaskStore.getState().tasks.find((t) => t.id === id);
-  if (cached) return cached.title;
+  if (cached) return cached;
   const db = await getDatabase();
-  const task = await getTaskById(db, id);
-  return task?.title ?? null;
+  return getTaskById(db, id);
 }
 
 export function FocusScreen() {
@@ -150,9 +150,9 @@ export function FocusScreen() {
     };
   }, [startRitualId, start]);
 
-  // Started from a Today task (TaskCard's "Start" button). No ritual involved — starts
-  // with whatever mode is currently selected on this screen, just tagged with taskId so
-  // it shows up associated with the task in History later.
+  // Started from a Today task (TaskCard's "Start" button). No ritual involved. If the
+  // task pinned its own mode+duration (TaskDurationSheet), that overrides whatever's
+  // currently selected on this screen; otherwise falls back to it exactly as before.
   const startedTaskIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -160,11 +160,11 @@ export function FocusScreen() {
     startedTaskIdRef.current = startTaskId;
 
     let cancelled = false;
-    resolveTaskTitle(startTaskId)
-      .then((title) => {
-        if (title == null || cancelled) return;
+    resolveTask(startTaskId)
+      .then((task) => {
+        if (task == null || cancelled) return;
         haptics.tap();
-        start(mode, { taskId: startTaskId });
+        start(task.mode ?? mode, { taskId: startTaskId, focusMinutes: task.focusMinutes ?? undefined });
       })
       .catch((error: unknown) => {
         console.error('[FocusScreen] failed to start from task', error);
@@ -197,10 +197,10 @@ export function FocusScreen() {
     appliedTaskIdRef.current = sessionTaskId;
 
     let cancelled = false;
-    resolveTaskTitle(sessionTaskId)
-      .then((title) => {
+    resolveTask(sessionTaskId)
+      .then((task) => {
         if (cancelled) return;
-        setActiveTaskTitle(title);
+        setActiveTaskTitle(task?.title ?? null);
       })
       .catch((error: unknown) => {
         console.error('[FocusScreen] failed to resolve active task', error);

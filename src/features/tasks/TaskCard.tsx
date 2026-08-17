@@ -1,3 +1,4 @@
+import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, TextInput, View } from 'react-native';
@@ -6,10 +7,13 @@ import { Button } from '@/components/Button';
 import { IconButton } from '@/components/IconButton';
 import { Surface } from '@/components/Surface';
 import { Text } from '@/components/Text';
+import { formatFocusDuration } from '@/domain/stats/statsAggregation';
 import type { Task } from '@/domain/task/types';
 import * as haptics from '@/lib/haptics';
 import { useTaskStore } from '@/store/taskStore';
 import { useTheme } from '@/theme/ThemeProvider';
+
+import { TaskDurationSheet } from './TaskDurationSheet';
 
 export interface TaskCardProps {
   task: Task;
@@ -19,10 +23,12 @@ export function TaskCard({ task }: TaskCardProps) {
   const theme = useTheme();
   const toggleDone = useTaskStore((s) => s.toggleDone);
   const updateTitle = useTaskStore((s) => s.updateTitle);
+  const updateDuration = useTaskStore((s) => s.updateDuration);
   const remove = useTaskStore((s) => s.remove);
 
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(task.title);
+  const [durationSheetVisible, setDurationSheetVisible] = useState(false);
 
   const handleToggle = () => {
     haptics.select();
@@ -51,6 +57,13 @@ export function TaskCard({ task }: TaskCardProps) {
       { text: 'Delete', style: 'destructive', onPress: () => void remove(task.id) },
     ]);
   };
+
+  const handleOpenDuration = () => {
+    haptics.tap();
+    setDurationSheetVisible(true);
+  };
+
+  const durationLabel = task.mode && task.focusMinutes ? formatFocusDuration(task.focusMinutes * 60_000) : 'Default';
 
   return (
     <Surface style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
@@ -98,6 +111,28 @@ export function TaskCard({ task }: TaskCardProps) {
         )}
       </View>
 
+      {!task.isDone && (
+        <Pressable
+          onPress={handleOpenDuration}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`Change duration, currently ${durationLabel}`}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: theme.spacing.xxs,
+            paddingVertical: theme.spacing.xxs,
+            paddingHorizontal: theme.spacing.xs,
+            borderRadius: theme.radius.pill,
+            backgroundColor: theme.neutral.background,
+          }}
+        >
+          <Feather name="clock" size={12} color={theme.neutral.textMuted} />
+          <Text variant="caption" color={theme.neutral.textMuted}>
+            {durationLabel}
+          </Text>
+        </Pressable>
+      )}
       {!task.isDone && <Button label="Start" onPress={handleStart} />}
       <IconButton
         icon="trash-2"
@@ -106,6 +141,14 @@ export function TaskCard({ task }: TaskCardProps) {
         color={theme.neutral.textMuted}
         backgroundColor="transparent"
         accessibilityLabel="Delete task"
+      />
+
+      <TaskDurationSheet
+        visible={durationSheetVisible}
+        onClose={() => setDurationSheetVisible(false)}
+        mode={task.mode}
+        focusMinutes={task.focusMinutes}
+        onSave={(mode, focusMinutes) => void updateDuration(task.id, mode, focusMinutes)}
       />
     </Surface>
   );
