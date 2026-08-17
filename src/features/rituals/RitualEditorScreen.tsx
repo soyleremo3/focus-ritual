@@ -223,7 +223,7 @@ export function RitualEditorScreen({ ritualId }: RitualEditorScreenProps) {
 
         {showsDurations(mode) && (
           <View style={{ flexDirection: 'row', gap: theme.spacing.xl }}>
-            <NumberField label="Focus" value={focusMinutes} onChange={setFocusMinutes} min={1} max={240} unit="min" />
+            <NumberField label="Focus" value={focusMinutes} onChange={setFocusMinutes} min={1} max={480} unit="min" />
             <NumberField label="Break" value={breakMinutes} onChange={setBreakMinutes} min={0} max={60} unit="min" />
             {showsCycles(mode) && (
               <NumberField

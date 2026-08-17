@@ -123,7 +123,7 @@ export function SettingsScreen() {
                 if (next != null) void update({ defaultFocusMinutes: next });
               }}
               min={1}
-              max={240}
+              max={480}
               unit="min"
             />
             <NumberField

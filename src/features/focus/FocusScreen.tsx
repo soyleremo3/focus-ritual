@@ -386,7 +386,7 @@ export function FocusScreen() {
                 value={customFocusMinutes}
                 onChange={setCustomFocusMinutes}
                 min={1}
-                max={240}
+                max={480}
                 unit="min"
                 textColor={palette.text}
                 mutedColor={palette.textMuted}
