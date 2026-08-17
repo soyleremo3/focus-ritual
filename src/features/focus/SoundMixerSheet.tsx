@@ -27,8 +27,14 @@ export function SoundMixerSheet({ visible, onClose, palette }: SoundMixerSheetPr
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-        <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)' }]} onPress={onClose} />
+        <Pressable
+          style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)' }]}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close ambient sound mixer"
+        />
         <View
+          accessibilityViewIsModal
           style={{
             maxHeight: '80%',
             backgroundColor: palette.background,
@@ -52,8 +58,16 @@ export function SoundMixerSheet({ visible, onClose, palette }: SoundMixerSheetPr
                 disabled={activeMix.length === 0}
                 color={palette.text}
                 backgroundColor={palette.surface}
+                accessibilityLabel={masterPlaying ? 'Pause ambient sound' : 'Play ambient sound'}
               />
-              <IconButton icon="x" size={18} onPress={onClose} color={palette.text} backgroundColor={palette.surface} />
+              <IconButton
+                icon="x"
+                size={18}
+                onPress={onClose}
+                color={palette.text}
+                backgroundColor={palette.surface}
+                accessibilityLabel="Close ambient sound mixer"
+              />
             </View>
           </View>
 

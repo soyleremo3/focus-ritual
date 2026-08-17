@@ -62,7 +62,7 @@ export function SpacesGalleryScreen() {
         }}
       >
         <Text variant="title">Focus Spaces</Text>
-        <IconButton icon="x" size={18} onPress={() => router.back()} />
+        <IconButton icon="x" size={18} onPress={() => router.back()} accessibilityLabel="Close Focus Spaces" />
       </View>
 
       <FlatList

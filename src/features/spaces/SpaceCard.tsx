@@ -17,11 +17,21 @@ export interface SpaceCardProps {
   onEdit?: () => void;
 }
 
-function MiniButton({ onPress, children }: { onPress: () => void; children: ReactNode }) {
+interface MiniButtonProps {
+  onPress: () => void;
+  label: string;
+  selected?: boolean;
+  children: ReactNode;
+}
+
+function MiniButton({ onPress, label, selected, children }: MiniButtonProps) {
   return (
     <Pressable
       onPress={onPress}
       hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={selected != null ? { selected } : undefined}
       style={{
         width: 28,
         height: 28,
@@ -43,6 +53,13 @@ export function SpaceCard({ space, selected, onPress, onToggleFavorite, onEdit }
   return (
     <Pressable
       onPress={onPress}
+      // No accessibilityRole here deliberately — this card wraps its own nested
+      // interactive controls (the edit/favorite MiniButtons below), and RN Web maps
+      // accessibilityRole="button" to a real <button> element; a <button> wrapping other
+      // <button>s is invalid HTML and broke hydration on web. The label still gets
+      // exposed to assistive tech without the role forcing that element type.
+      accessibilityLabel={`Use ${space.name} as Focus Space`}
+      accessibilityState={{ selected }}
       style={{
         flex: 1,
         aspectRatio: 0.82,
@@ -81,15 +98,23 @@ export function SpaceCard({ space, selected, onPress, onToggleFavorite, onEdit }
           top: theme.spacing.xs,
           right: theme.spacing.xs,
           flexDirection: 'row',
-          gap: theme.spacing.xxs,
+          // Each MiniButton's hitSlop(8) extends its tappable area well past its 28pt
+          // visual box — a gap.xxs (4) here left the two hit areas overlapping by 12pt,
+          // making taps in the seam land on whichever button unpredictably. md (16) is
+          // the minimum gap that keeps the two 8pt hitSlops from touching at all.
+          gap: theme.spacing.md,
         }}
       >
         {onEdit && (
-          <MiniButton onPress={onEdit}>
+          <MiniButton onPress={onEdit} label={`Edit ${space.name}`}>
             <Feather name="edit-2" size={13} color="#FFFFFF" />
           </MiniButton>
         )}
-        <MiniButton onPress={onToggleFavorite}>
+        <MiniButton
+          onPress={onToggleFavorite}
+          label={space.isFavorite ? `Remove ${space.name} from favorites` : `Add ${space.name} to favorites`}
+          selected={space.isFavorite}
+        >
           <Feather name="star" size={13} color={space.isFavorite ? palette.accent : '#FFFFFF'} />
         </MiniButton>
       </View>

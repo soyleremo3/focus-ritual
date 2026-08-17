@@ -8,6 +8,8 @@ import { useTheme } from '@/theme/ThemeProvider';
 export interface ToggleProps {
   value: boolean;
   onValueChange: (next: boolean) => void;
+  /** Announced by screen readers — without it, every switch on a screen reads identically as "on/off, switch". */
+  label: string;
   disabled?: boolean;
 }
 
@@ -19,7 +21,7 @@ const THUMB_INSET = 3;
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 /** A minimal switch — the app's only boolean-setting control, used in Settings. */
-export function Toggle({ value, onValueChange, disabled = false }: ToggleProps) {
+export function Toggle({ value, onValueChange, label, disabled = false }: ToggleProps) {
   const theme = useTheme();
   const progress = useSharedValue(value ? 1 : 0);
 
@@ -37,9 +39,11 @@ export function Toggle({ value, onValueChange, disabled = false }: ToggleProps) 
   return (
     <AnimatedPressable
       accessibilityRole="switch"
+      accessibilityLabel={label}
       accessibilityState={{ checked: value, disabled }}
       disabled={disabled}
       onPress={() => onValueChange(!value)}
+      hitSlop={8}
       style={[
         {
           width: TRACK_WIDTH,

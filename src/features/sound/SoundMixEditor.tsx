@@ -75,7 +75,13 @@ export function SoundMixEditor({
               Master Volume
             </Text>
           </View>
-          <VolumeBar value={masterVolume} onChange={onMasterVolumeChange} trackColor={trackColor} fillColor={accentColor} />
+          <VolumeBar
+            value={masterVolume}
+            onChange={onMasterVolumeChange}
+            trackColor={trackColor}
+            fillColor={accentColor}
+            label="Master volume"
+          />
         </View>
       )}
 
@@ -134,6 +140,9 @@ export function SoundMixEditor({
               <View key={sound.id} style={{ gap: theme.spacing.sm }}>
                 <Pressable
                   onPress={() => onToggleLayer(sound.id)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: active }}
+                  accessibilityLabel={`${sound.label} ${active ? 'on' : 'off'}`}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}
                 >
                   <Feather name={active ? 'volume-2' : 'volume-x'} size={18} color={active ? accentColor : mutedColor} />
@@ -147,6 +156,7 @@ export function SoundMixEditor({
                     onChange={(v) => onLayerVolumeChange(sound.id, v)}
                     trackColor={trackColor}
                     fillColor={accentColor}
+                    label={`${sound.label} volume`}
                   />
                 )}
               </View>

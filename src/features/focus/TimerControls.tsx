@@ -50,9 +50,21 @@ export function TimerControls({
   if (session.status === 'running') {
     return (
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
-        <IconButton icon="x" onPress={onCancel} color={palette.textMuted} backgroundColor={palette.surface} />
+        <IconButton
+          icon="x"
+          onPress={onCancel}
+          color={palette.textMuted}
+          backgroundColor={palette.surface}
+          accessibilityLabel="Cancel session"
+        />
         <Button label="Pause" onPress={onPause} backgroundColor={palette.accent} textColor={palette.onAccent} />
-        <IconButton icon="check" onPress={onFinish} color={palette.textMuted} backgroundColor={palette.surface} />
+        <IconButton
+          icon="check"
+          onPress={onFinish}
+          color={palette.textMuted}
+          backgroundColor={palette.surface}
+          accessibilityLabel="Finish session"
+        />
       </View>
     );
   }
@@ -60,9 +72,21 @@ export function TimerControls({
   if (session.status === 'paused') {
     return (
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
-        <IconButton icon="x" onPress={onCancel} color={palette.textMuted} backgroundColor={palette.surface} />
+        <IconButton
+          icon="x"
+          onPress={onCancel}
+          color={palette.textMuted}
+          backgroundColor={palette.surface}
+          accessibilityLabel="Cancel session"
+        />
         <Button label="Resume" onPress={onResume} backgroundColor={palette.accent} textColor={palette.onAccent} />
-        <IconButton icon="check" onPress={onFinish} color={palette.textMuted} backgroundColor={palette.surface} />
+        <IconButton
+          icon="check"
+          onPress={onFinish}
+          color={palette.textMuted}
+          backgroundColor={palette.surface}
+          accessibilityLabel="Finish session"
+        />
       </View>
     );
   }
@@ -99,9 +123,21 @@ export function TimerControls({
         {completeLabel}
       </Text>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
-        <IconButton icon="x" onPress={onCancel} color={palette.textMuted} backgroundColor={palette.surface} />
+        <IconButton
+          icon="x"
+          onPress={onCancel}
+          color={palette.textMuted}
+          backgroundColor={palette.surface}
+          accessibilityLabel="Cancel session"
+        />
         <Button label={nextLabel} onPress={onAdvancePhase} backgroundColor={palette.accent} textColor={palette.onAccent} />
-        <IconButton icon="check" onPress={onFinish} color={palette.textMuted} backgroundColor={palette.surface} />
+        <IconButton
+          icon="check"
+          onPress={onFinish}
+          color={palette.textMuted}
+          backgroundColor={palette.surface}
+          accessibilityLabel="Finish session"
+        />
       </View>
     </View>
   );

@@ -67,7 +67,11 @@ export function RitualCard({ ritual }: RitualCardProps) {
   };
 
   return (
-    <Pressable onPress={handleEdit}>
+    // No accessibilityRole here deliberately — this card wraps its own nested interactive
+    // controls (Start button, favorite/duplicate/delete IconButtons below), and RN Web maps
+    // accessibilityRole="button" to a real <button> element; a <button> wrapping other
+    // <button>s is invalid HTML and breaks hydration on web.
+    <Pressable onPress={handleEdit} accessibilityLabel={`Edit ritual ${ritual.name}`}>
       <Surface style={{ gap: theme.spacing.sm }}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <View style={{ flex: 1, gap: theme.spacing.xxs }}>
@@ -87,17 +91,20 @@ export function RitualCard({ ritual }: RitualCardProps) {
             onPress={handleToggleFavorite}
             color={ritual.isFavorite ? theme.neutral.accent : theme.neutral.textMuted}
             backgroundColor="transparent"
+            accessibilityLabel={ritual.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            accessibilityState={{ selected: ritual.isFavorite }}
           />
         </View>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
           <Button label="Start" onPress={handleStart} style={{ flex: 1 }} />
-          <IconButton icon="copy" size={16} onPress={handleDuplicate} />
+          <IconButton icon="copy" size={16} onPress={handleDuplicate} accessibilityLabel="Duplicate ritual" />
           <IconButton
             icon="trash-2"
             size={16}
             onPress={handleDelete}
             color={theme.neutral.textMuted}
+            accessibilityLabel="Delete ritual"
           />
         </View>
       </Surface>

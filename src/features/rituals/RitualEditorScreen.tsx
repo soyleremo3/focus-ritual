@@ -179,7 +179,7 @@ export function RitualEditorScreen({ ritualId }: RitualEditorScreenProps) {
         }}
       >
         <Text variant="title">{isEditing ? 'Edit Ritual' : 'New Ritual'}</Text>
-        <IconButton icon="x" size={18} onPress={handleCancel} />
+        <IconButton icon="x" size={18} onPress={handleCancel} accessibilityLabel="Close without saving" />
       </View>
 
       <ScrollView

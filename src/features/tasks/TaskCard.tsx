@@ -60,6 +60,8 @@ export function TaskCard({ task }: TaskCardProps) {
         onPress={handleToggle}
         color={task.isDone ? theme.neutral.accent : theme.neutral.textMuted}
         backgroundColor="transparent"
+        accessibilityLabel={task.isDone ? 'Mark task not done' : 'Mark task done'}
+        accessibilityState={{ checked: task.isDone }}
       />
 
       <View style={{ flex: 1 }}>
@@ -79,7 +81,12 @@ export function TaskCard({ task }: TaskCardProps) {
             }}
           />
         ) : (
-          <Pressable onPress={() => !task.isDone && setEditing(true)} disabled={task.isDone}>
+          <Pressable
+            onPress={() => !task.isDone && setEditing(true)}
+            disabled={task.isDone}
+            accessibilityRole={task.isDone ? undefined : 'button'}
+            accessibilityLabel={task.isDone ? undefined : `Edit task: ${task.title}`}
+          >
             <Text
               variant="body"
               color={task.isDone ? theme.neutral.textMuted : theme.neutral.text}
@@ -98,6 +105,7 @@ export function TaskCard({ task }: TaskCardProps) {
         onPress={handleDelete}
         color={theme.neutral.textMuted}
         backgroundColor="transparent"
+        accessibilityLabel="Delete task"
       />
     </Surface>
   );

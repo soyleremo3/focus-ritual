@@ -55,6 +55,7 @@ function SettingRow({ label, description, value, onValueChange }: SettingRowProp
       </View>
       <Toggle
         value={value}
+        label={label}
         onValueChange={(next) => {
           haptics.select();
           onValueChange(next);

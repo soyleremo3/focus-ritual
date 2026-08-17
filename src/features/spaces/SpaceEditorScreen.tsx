@@ -153,7 +153,7 @@ export function SpaceEditorScreen({ spaceId }: SpaceEditorScreenProps) {
         }}
       >
         <Text variant="title">{isEditing ? 'Edit Focus Space' : 'New Focus Space'}</Text>
-        <IconButton icon="x" size={18} onPress={handleCancel} />
+        <IconButton icon="x" size={18} onPress={handleCancel} accessibilityLabel="Close without saving" />
       </View>
 
       <ScrollView

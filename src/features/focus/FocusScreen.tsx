@@ -303,7 +303,12 @@ export function FocusScreen() {
             paddingTop: theme.spacing.sm,
           }}
         >
-          <Pressable onPress={handleOpenSpaces} hitSlop={12}>
+          <Pressable
+            onPress={handleOpenSpaces}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel={`Change Focus Space, currently ${spaceName}`}
+          >
             <Text variant="label" color={palette.textMuted}>
               {spaceName}
             </Text>
@@ -314,6 +319,7 @@ export function FocusScreen() {
             onPress={() => setMixerVisible(true)}
             color={palette.text}
             backgroundColor={palette.surface}
+            accessibilityLabel="Open ambient sound mixer"
           />
         </View>
 

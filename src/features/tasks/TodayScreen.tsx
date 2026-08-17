@@ -72,7 +72,12 @@ export function TodayScreen() {
             borderColor: theme.neutral.border,
           }}
         />
-        <IconButton icon="plus" onPress={handleAdd} disabled={!isValidTaskTitle(draftTitle)} />
+        <IconButton
+          icon="plus"
+          onPress={handleAdd}
+          disabled={!isValidTaskTitle(draftTitle)}
+          accessibilityLabel="Add task"
+        />
       </View>
 
       {loaded && tasks.length === 0 ? (
