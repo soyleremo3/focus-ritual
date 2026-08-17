@@ -92,7 +92,9 @@ const drafts: Record<MoodId, MoodDraft> = {
     surface: 'rgba(40,32,20,0.06)',
     text: '#2B2417',
     textMuted: 'rgba(43,36,23,0.62)',
-    accent: '#B5652F',
+    // Darkened from #B5652F (4.01:1 against onAccent, under the 4.5:1 AA text minimum) to
+    // 4.60:1 — same fix as ThemeProvider's lightNeutral.accent.
+    accent: '#A75D2B',
     onAccent: '#FBF6EF',
   },
 };

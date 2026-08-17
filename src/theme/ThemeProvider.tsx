@@ -24,21 +24,26 @@ export interface NeutralPalette {
  * not the Focus screen's scene backdrop. Kept separate from useScenePalette() so the rest
  * of the app stays coherent while the Focus screen adapts per Focus Space.
  */
-const lightNeutral: NeutralPalette = {
+export const lightNeutral: NeutralPalette = {
   background: '#FBF6EF',
   surface: '#FFFFFF',
-  border: '#E7DFD2',
+  // Darkened from the original #E7DFD2 (1.2:1 against background) to clear WCAG's 3:1
+  // non-text contrast minimum for UI component boundaries.
+  border: '#8F8A82',
   text: '#241C12',
   textMuted: '#6B6153',
-  accent: '#B5652F',
+  // Darkened from the original #B5652F (4.01:1 against onAccent, just under the 4.5:1
+  // AA text minimum) to 4.60:1.
+  accent: '#A75D2B',
   onAccent: '#FBF6EF',
   isDark: false,
 };
 
-const darkNeutral: NeutralPalette = {
+export const darkNeutral: NeutralPalette = {
   background: '#17130E',
   surface: '#231D15',
-  border: '#382F22',
+  // Lightened from the original #382F22 (1.3-1.4:1) to clear the same 3:1 minimum.
+  border: '#7B674B',
   text: '#F3ECE0',
   textMuted: '#A69C8B',
   accent: '#E8935B',
