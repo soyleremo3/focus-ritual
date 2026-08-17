@@ -11,6 +11,7 @@ import { getTaskById } from '@/db/repositories/tasksRepo';
 import { ritualToActiveMix, ritualToSessionStart } from '@/domain/ritual/ritual';
 import type { Ritual } from '@/domain/ritual/types';
 import { MODE_DEFAULTS, type TimerMode } from '@/domain/timer/types';
+import { NumberField } from '@/features/rituals/NumberField';
 import * as haptics from '@/lib/haptics';
 import { useRitualStore } from '@/store/ritualStore';
 import { useSettingsStore } from '@/store/settingsStore';
@@ -86,6 +87,16 @@ export function FocusScreen() {
   const pauseSoundWithTimer = useSettingsStore((s) => s.settings.pauseSoundWithTimer);
   const defaultFocusMinutes = useSettingsStore((s) => s.settings.defaultFocusMinutes);
   const defaultBreakMinutes = useSettingsStore((s) => s.settings.defaultBreakMinutes);
+
+  // Custom mode's whole point is a per-session duration — previously it silently always
+  // used Settings' Timer Defaults with no way to change it from the Focus screen itself, so
+  // "Custom" wasn't actually customizable. These start pre-filled from that same default and
+  // are editable right here; re-synced whenever the persisted default changes (covers the
+  // default still being the store's placeholder until hydrate() resolves it).
+  const [customFocusMinutes, setCustomFocusMinutes] = useState<number | null>(defaultFocusMinutes);
+  const [customBreakMinutes, setCustomBreakMinutes] = useState<number | null>(defaultBreakMinutes);
+  useEffect(() => setCustomFocusMinutes(defaultFocusMinutes), [defaultFocusMinutes]);
+  useEffect(() => setCustomBreakMinutes(defaultBreakMinutes), [defaultBreakMinutes]);
 
   const isSessionActive = session != null && ACTIVE_STATUSES.has(session.status);
 
@@ -237,8 +248,9 @@ export function FocusScreen() {
     haptics.tap();
     // Custom is the one mode meant for a user-defined duration when started standalone
     // (no ritual) — every other mode's numbers are what define that mode, so they stay
-    // fixed at MODE_DEFAULTS.
-    const options = mode === 'custom' ? { focusMinutes: defaultFocusMinutes, breakMinutes: defaultBreakMinutes } : undefined;
+    // fixed at MODE_DEFAULTS. Uses this screen's own draft, not Settings' Timer Defaults
+    // directly, so editing the fields below actually changes what Start uses.
+    const options = mode === 'custom' ? { focusMinutes: customFocusMinutes, breakMinutes: customBreakMinutes } : undefined;
     start(mode, options);
     soundPlay();
   };
@@ -286,7 +298,9 @@ export function FocusScreen() {
       ? session.phase === 'focus'
         ? session.focusMinutes
         : session.breakMinutes
-      : MODE_DEFAULTS[mode].focusMinutes;
+      : mode === 'custom'
+        ? customFocusMinutes
+        : MODE_DEFAULTS[mode].focusMinutes;
   const plannedMs = currentPhaseMinutes != null ? currentPhaseMinutes * 60_000 : null;
 
   // Same isSessionActive gating as currentPhaseMinutes above — a terminal session must not
@@ -363,6 +377,31 @@ export function FocusScreen() {
               mutedColor={palette.textMuted}
               borderColor={palette.surface}
             />
+          )}
+
+          {!isSessionActive && mode === 'custom' && (
+            <View style={{ flexDirection: 'row', gap: theme.spacing.xl }}>
+              <NumberField
+                label="Focus"
+                value={customFocusMinutes}
+                onChange={setCustomFocusMinutes}
+                min={1}
+                max={240}
+                unit="min"
+                textColor={palette.text}
+                mutedColor={palette.textMuted}
+              />
+              <NumberField
+                label="Break"
+                value={customBreakMinutes}
+                onChange={setCustomBreakMinutes}
+                min={0}
+                max={60}
+                unit="min"
+                textColor={palette.text}
+                mutedColor={palette.textMuted}
+              />
+            </View>
           )}
 
           <TimerRing size={ringSize} progress={progress} trackColor={palette.surface} progressColor={palette.accent}>
