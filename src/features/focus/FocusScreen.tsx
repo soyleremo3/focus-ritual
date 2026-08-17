@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, View, useWindowDimensions } from 'react-native';
+import { Keyboard, Pressable, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { IconButton } from '@/components/IconButton';
@@ -327,115 +327,122 @@ export function FocusScreen() {
     <View style={{ flex: 1 }}>
       <SceneBackdrop palette={palette} imageUri={spaceImageUri} />
       <SafeAreaView style={{ flex: 1 }}>
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingHorizontal: theme.spacing.lg,
-            paddingTop: theme.spacing.sm,
-          }}
-        >
-          <Pressable
-            onPress={handleOpenSpaces}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel={`Change Focus Space, currently ${spaceName}`}
+        {/* iOS's number-pad keyboard (Custom mode's Focus/Break fields) has no Done/return
+            key at all — the only way to dismiss it is tapping outside the field, so the
+            whole screen needs to do that. Nested Pressables (mode chips, buttons, the
+            fields themselves) still get their own taps via RN's responder system — this
+            only fires for a tap that doesn't land on any of them. */}
+        <Pressable style={{ flex: 1 }} onPress={Keyboard.dismiss}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingHorizontal: theme.spacing.lg,
+              paddingTop: theme.spacing.sm,
+            }}
           >
-            <Text variant="caption" color={palette.textMuted}>
-              {spaceName}
-            </Text>
-          </Pressable>
-          <IconButton
-            icon="music"
-            size={18}
-            onPress={() => setMixerVisible(true)}
-            color={palette.text}
-            backgroundColor={palette.surface}
-            accessibilityLabel="Open ambient sound mixer"
-          />
-        </View>
-
-        {activeTaskTitle && (
-          <Text
-            variant="body"
-            color={palette.textMuted}
-            style={{ textAlign: 'center', paddingTop: theme.spacing.xs }}
-            numberOfLines={1}
-          >
-            {activeTaskTitle}
-          </Text>
-        )}
-
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: theme.spacing.xl }}>
-          {!isSessionActive && (
-            <ModePicker
-              selected={mode}
-              onSelect={setMode}
-              accentColor={palette.accent}
-              onAccentColor={palette.onAccent}
-              mutedColor={palette.textMuted}
-              borderColor={palette.surface}
-            />
-          )}
-
-          {!isSessionActive && mode === 'custom' && (
-            <View style={{ flexDirection: 'row', gap: theme.spacing.xl }}>
-              <NumberField
-                label="Focus"
-                value={customFocusMinutes}
-                onChange={setCustomFocusMinutes}
-                min={1}
-                max={480}
-                unit="min"
-                textColor={palette.text}
-                mutedColor={palette.textMuted}
-              />
-              <NumberField
-                label="Break"
-                value={customBreakMinutes}
-                onChange={setCustomBreakMinutes}
-                min={0}
-                max={60}
-                unit="min"
-                textColor={palette.text}
-                mutedColor={palette.textMuted}
-              />
-            </View>
-          )}
-
-          <TimerRing size={ringSize} progress={progress} trackColor={palette.surface} progressColor={palette.accent}>
-            <Text variant="label" color={palette.textMuted} style={{ marginBottom: theme.spacing.xs }}>
-              {phaseLabel}
-            </Text>
-            <Text
-              variant="hero"
-              color={palette.text}
-              numberOfLines={1}
-              // Always this one size for every format (never the hero variant's 88, which
-              // doesn't fit an H:MM:SS clock like "1:30:00" on one line) — scales with the
-              // ring itself so it's as large as fits without overflowing on any screen size,
-              // and MM:SS/H:MM:SS render at the same size instead of visibly jumping.
-              style={{ fontSize: clockFontSize, lineHeight: clockFontSize * theme.lineHeight.tight }}
+            <Pressable
+              onPress={handleOpenSpaces}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={`Change Focus Space, currently ${spaceName}`}
             >
-              {clockText}
-            </Text>
-          </TimerRing>
-        </View>
+              <Text variant="caption" color={palette.textMuted}>
+                {spaceName}
+              </Text>
+            </Pressable>
+            <IconButton
+              icon="music"
+              size={18}
+              onPress={() => setMixerVisible(true)}
+              color={palette.text}
+              backgroundColor={palette.surface}
+              accessibilityLabel="Open ambient sound mixer"
+            />
+          </View>
 
-        <View style={{ alignItems: 'center', paddingBottom: theme.spacing.xl }}>
-          <TimerControls
-            session={session}
-            palette={palette}
-            onStart={handleStart}
-            onPause={handlePause}
-            onResume={handleResume}
-            onAdvancePhase={handleAdvancePhase}
-            onContinueFocus={handleContinueFocus}
-            onCancel={handleCancel}
-            onFinish={handleFinish}
-          />
-        </View>
+          {activeTaskTitle && (
+            <Text
+              variant="body"
+              color={palette.textMuted}
+              style={{ textAlign: 'center', paddingTop: theme.spacing.xs }}
+              numberOfLines={1}
+            >
+              {activeTaskTitle}
+            </Text>
+          )}
+
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: theme.spacing.xl }}>
+            {!isSessionActive && (
+              <ModePicker
+                selected={mode}
+                onSelect={setMode}
+                accentColor={palette.accent}
+                onAccentColor={palette.onAccent}
+                mutedColor={palette.textMuted}
+                borderColor={palette.surface}
+              />
+            )}
+
+            {!isSessionActive && mode === 'custom' && (
+              <View style={{ flexDirection: 'row', gap: theme.spacing.xl }}>
+                <NumberField
+                  label="Focus"
+                  value={customFocusMinutes}
+                  onChange={setCustomFocusMinutes}
+                  min={1}
+                  max={480}
+                  unit="min"
+                  textColor={palette.text}
+                  mutedColor={palette.textMuted}
+                />
+                <NumberField
+                  label="Break"
+                  value={customBreakMinutes}
+                  onChange={setCustomBreakMinutes}
+                  min={0}
+                  max={60}
+                  unit="min"
+                  textColor={palette.text}
+                  mutedColor={palette.textMuted}
+                />
+              </View>
+            )}
+
+            <TimerRing size={ringSize} progress={progress} trackColor={palette.surface} progressColor={palette.accent}>
+              <Text variant="label" color={palette.textMuted} style={{ marginBottom: theme.spacing.xs }}>
+                {phaseLabel}
+              </Text>
+              <Text
+                variant="hero"
+                color={palette.text}
+                numberOfLines={1}
+                // Always this one size for every format (never the hero variant's 88, which
+                // doesn't fit an H:MM:SS clock like "1:30:00" on one line) — scales with the
+                // ring itself so it's as large as fits without overflowing on any screen size,
+                // and MM:SS/H:MM:SS render at the same size instead of visibly jumping.
+                style={{ fontSize: clockFontSize, lineHeight: clockFontSize * theme.lineHeight.tight }}
+              >
+                {clockText}
+              </Text>
+            </TimerRing>
+          </View>
+
+          <View style={{ alignItems: 'center', paddingBottom: theme.spacing.xl }}>
+            <TimerControls
+              session={session}
+              palette={palette}
+              onStart={handleStart}
+              onPause={handlePause}
+              onResume={handleResume}
+              onAdvancePhase={handleAdvancePhase}
+              onContinueFocus={handleContinueFocus}
+              onCancel={handleCancel}
+              onFinish={handleFinish}
+            />
+          </View>
+        </Pressable>
       </SafeAreaView>
 
       <SoundMixerSheet visible={mixerVisible} onClose={() => setMixerVisible(false)} palette={palette} />
