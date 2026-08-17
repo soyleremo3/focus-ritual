@@ -302,6 +302,7 @@ export function FocusScreen() {
       : (plannedMs ?? 0);
 
   const phaseLabel = !isSessionActive || !session ? 'Ready' : session.phase === 'focus' ? 'Focus' : 'Break';
+  const clockText = formatClock(clockMs);
 
   return (
     <View style={{ flex: 1 }}>
@@ -363,8 +364,21 @@ export function FocusScreen() {
             <Text variant="label" color={palette.textMuted} style={{ marginBottom: theme.spacing.xs }}>
               {phaseLabel}
             </Text>
-            <Text variant="hero" color={palette.text}>
-              {formatClock(clockMs)}
+            <Text
+              variant="hero"
+              color={palette.text}
+              numberOfLines={1}
+              style={
+                // An hour digit ("1:30:00", 7 chars) doesn't fit the ring at the hero size
+                // that "25:00" (5 chars) does — it wrapped to two lines and spilled below
+                // the ring. Drop to the display size for the H:MM:SS case; fontSize/
+                // lineHeight override the hero variant's, fontFamily/tracking stay.
+                clockText.length > 5
+                  ? { fontSize: theme.fontSize.display, lineHeight: theme.fontSize.display * theme.lineHeight.tight }
+                  : undefined
+              }
+            >
+              {clockText}
             </Text>
           </TimerRing>
         </View>
